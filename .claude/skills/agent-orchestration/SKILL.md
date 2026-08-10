@@ -1,206 +1,207 @@
 ---
 name: agent-orchestration
 description: >-
-  Orchestrates software engineering tasks with Claude Code as the primary
-  orchestrator, OMP for investigation and research, and Codex for
-  implementation. Use when a task benefits from multi-agent coordination,
-  including feature development, bug fixes, refactoring, static analysis,
-  technical research, architecture exploration, or new project work. Uses the
-  herdr skill for agent coordination. Do not use for trivial tasks where
-  delegation would add more overhead than value.
+  Orchestrates non-trivial software engineering work across three agents in a
+  Herdr session: Claude Code stays the orchestrator and reviewer, OMP does
+  investigation and research, Codex does implementation. Use for feature
+  development, bug fixes, refactoring, static analysis, technical research,
+  architecture exploration, or new project work whenever the investigation or
+  the implementation is substantial enough to be worth a handoff. Requires
+  HERDR_ENV=1 and builds on the herdr skill for pane and agent control. Do not
+  use for trivial tasks or single-step questions Claude Code can answer
+  directly.
 ---
 
 # Agent Orchestration
 
-Use the `herdr` skill for multi-agent coordination.
+You are **Claude Code** and remain the primary orchestrator for the whole task.
+Orchestration, review, and the completion decision are never delegated — everything else in this
+skill describes what you hand off and what you keep.
 
-You are **Claude Code** and remain the primary orchestrator throughout the task.
-Do not delegate the orchestrator role, final review, or completion decision to another agent.
+Use the `herdr` skill as the authority for pane and agent CLI syntax. This skill defines who does
+what, not how to drive Herdr.
+
+## Preconditions
+
+Delegation only works inside a Herdr-managed pane:
+
+```bash
+test "${HERDR_ENV:-}" = 1
+```
+
+If that fails, no delegated pane is reachable. Say so, then do the task yourself as a single agent.
+Do not try to reach OMP or Codex another way — running `omp` or `codex` as a foreground command
+would take over your own pane and end the orchestration.
+
+Before starting anything, check what already exists and what is installed:
+
+```bash
+herdr agent list   # reuse a live omp/codex agent instead of starting a duplicate
+herdr agent        # kinds must include omp and codex
+```
+
+If a kind is missing or `agent start` fails, do not silently substitute a different kind — the role
+assignment below is the point of the skill. Report the failure and either continue yourself or ask
+the user.
 
 ## Roles
 
-- **Orchestrator:** Claude Code / Opus 5 / `thinking: high`
-- **Investigation:** OMP / `opencode-go/deepseek-v4-flash` / `thinking: xhigh`
-- **Implementation:** Codex / `gpt-5.6-luna` / `effort: max`
+| Role | Agent | Herdr kind | Model / effort |
+| --- | --- | --- | --- |
+| Orchestration, decisions, review | Claude Code (you) | — | Opus 5, `thinking: high` |
+| Investigation and research | OMP | `omp` | `opencode-go/deepseek-v4-flash`, `thinking: xhigh` |
+| Implementation | Codex | `codex` | `gpt-5.6-luna`, `effort: max` |
 
-### Claude Code — Orchestration, Decisions, and Review
+Start delegated agents with the kind alone:
 
-You are responsible for:
-
-- understanding and planning the task;
-- defining objectives, constraints, scope, and completion criteria;
-- deciding whether investigation is necessary;
-- evaluating investigation results and validating hypotheses;
-- determining implementation strategy and scope;
-- delegating implementation;
-- reviewing actual changes and verification results;
-- deciding whether additional investigation or implementation is necessary;
-- making the final completion decision.
-
-### OMP — Investigation and Research
-
-Delegate investigation and analysis to OMP when useful.
-
-OMP is responsible for:
-
-- investigating existing codebases when applicable;
-- researching technologies, libraries, frameworks, APIs, specifications, documentation, and implementation approaches;
-- identifying root causes, dependencies, constraints, related areas, and potential impact;
-- comparing alternatives when technical decisions require evidence;
-- providing hypotheses with supporting evidence;
-- collecting information necessary for planning and implementation decisions.
-
-Investigation is not limited to existing codebases. For new projects or tasks without an existing implementation, use OMP for relevant technical research and analysis when it improves the implementation decision.
-
-### Codex — Implementation
-
-Delegate implementation to Codex by default.
-
-Codex is responsible for:
-
-- implementing features and fixes;
-- creating new code and project structures;
-- refactoring;
-- adding or updating tests;
-- updating documentation when necessary;
-- reporting the resulting changes and verification results.
-
-## Recommended Herdr Layout
-
-Keep Claude Code visually dominant because it is the primary orchestrator and the place where decisions, review, and completion happen.
-
-When both delegated agents are active, prefer this layout in the current tab:
-
-```text
-┌──────────────────────────────┬──────────────────────┐
-│                              │                      │
-│                              │         OMP          │
-│                              │   Investigation      │
-│                              │       ~25%           │
-│        Claude Code           ├──────────────────────┤
-│        Orchestrator          │                      │
-│           ~50%               │        Codex         │
-│                              │   Implementation     │
-│                              │       ~25%           │
-└──────────────────────────────┴──────────────────────┘
+```bash
+herdr agent start omp --kind omp --pane <pane-id>
+herdr agent start codex --kind codex --pane <pane-id>
 ```
 
-Layout policy:
+The models and levels in the table are what these CLIs already load from their own configuration
+(`~/.omp/agent/config.yml`, `~/.codex/config.toml`). Passing `--model`, `--thinking`, or
+`-c model_reasoning_effort` overrides only risks drifting from the user's configured setup, so
+don't. If a run looks like it used the wrong model, confirm with `herdr agent get <name>` rather
+than guessing.
 
-- Keep Claude Code in the left half of the tab whenever practical.
-- Use the right half as the delegated-agent area.
-- Place OMP in the upper-right pane and Codex in the lower-right pane when both are active.
-- If only one delegated agent is active, it may use the entire right half.
-- When adding the second delegated agent, split the existing right-side agent area into upper and lower panes instead of splitting Claude Code's pane again.
-- Keep focus on Claude Code for background delegation unless the user explicitly asks to focus another pane.
-- Preserve the current working directory for delegated panes unless the task requires a different location.
-- Reuse suitable existing agent panes when practical instead of creating unnecessary panes.
-- Treat the 50% / 25% / 25% ratio as a preferred target, not a requirement that justifies making panes unreadable.
-- Do not rearrange, move, resize, or close user-owned panes merely to force this layout. If the current tab cannot accommodate it cleanly, use the closest readable layout and preserve the user's existing workspace.
-- Do not create a new workspace, tab, or worktree solely to achieve this layout unless the user explicitly requests it.
+### Claude Code — orchestration, decisions, and review
 
-Use the `herdr` skill as the authority for the actual pane inspection, split, focus, and agent-start commands. This skill defines the desired topology, not Herdr CLI syntax.
+You own: understanding and planning the task; defining objectives, constraints, scope, and
+completion criteria; deciding whether investigation is necessary; evaluating evidence and validating
+hypotheses; determining implementation strategy and scope; reviewing the actual changes and
+verification results; deciding whether more investigation or implementation is needed; and the final
+completion decision.
+
+### OMP — investigation and research
+
+Delegate investigation and analysis to OMP when it is substantial enough to be worth the handoff:
+investigating existing code; researching technologies, libraries, APIs, specifications, and
+implementation approaches; identifying root causes, dependencies, constraints, and potential impact;
+comparing alternatives when a technical decision needs evidence; producing hypotheses with
+supporting evidence.
+
+Investigation is not limited to existing code. For new projects, use OMP for the technical research
+that improves the implementation decision.
+
+**OMP is read-only.** OMP and Codex share one working directory and one git working tree, so two
+agents writing at once can corrupt each other's work. State the read-only constraint in the prompt
+you send, and keep file modification exclusively with Codex.
+
+### Codex — implementation
+
+Delegate implementation to Codex by default: features and fixes; new code and project structure;
+refactoring; tests; documentation when needed; and a report of the resulting changes and
+verification results.
 
 ## Workflow
 
 1. Define the objective, constraints, scope, and completion criteria.
 2. Split large tasks into small, reviewable units and make progress incrementally.
 3. When investigation is necessary, delegate it to OMP.
-4. Evaluate OMP's evidence and hypotheses yourself. Request additional investigation when confidence is insufficient.
+4. Evaluate OMP's evidence and hypotheses yourself. Ask for more when confidence is insufficient.
 5. Determine the implementation strategy, scope, constraints, and completion criteria yourself.
 6. Delegate implementation to Codex.
 7. Review the actual changes and verification results yourself.
-8. If problems remain, decide whether additional investigation or implementation is required.
-9. Run appropriate project-specific verification and confirm the completion criteria before declaring the task complete.
+8. If problems remain, decide whether more investigation or implementation is required.
+9. Run the project's own verification and confirm the completion criteria before declaring the task
+   complete.
 
-Do not pass OMP's investigation directly to Codex as an implementation instruction. You must evaluate the investigation and determine the implementation strategy first.
+Do not pass OMP's investigation straight to Codex as an implementation instruction. The evaluation
+step is where a plausible-but-wrong hypothesis gets caught; skipping it just moves the error
+downstream.
 
-## Investigation Handoff
+## Handoffs
 
-Require OMP to report investigation results concisely with:
+Delegated agents share none of your conversation. Every prompt must stand alone: state the objective
+and the concrete paths, commands, constraints, and criteria the agent needs, and repeat relevant
+findings rather than referring to earlier discussion the agent never saw.
 
-- conclusion;
-- evidence and sources;
-- relevant code, files, documentation, APIs, or specifications when applicable;
-- constraints and impact;
-- alternatives when relevant;
-- hypothesis and confidence when applicable.
+**To OMP**, require a concise report with: conclusion; evidence and sources; relevant code, files,
+documentation, APIs, or specifications; constraints and impact; alternatives when relevant;
+hypothesis and confidence when applicable. Prefer precise references over prose.
 
-Avoid unnecessary verbose explanations. Prefer precise references and actionable evidence.
+If a report is too long to read back from the pane — agents often run on the terminal's alternate
+screen, where raising `--lines` recovers nothing — ask the agent to write the full report as
+Markdown under the scratch directory and reply with only the path, then read the file. Use this as a
+fallback after a failed read, not as the default request.
 
-## Implementation Handoff
+**To Codex**, communicate: objective; scope; constraints; implementation strategy; completion
+criteria; relevant investigation findings. Do not over-specify implementation details unless they
+are real constraints — Codex should make local decisions inside the approved strategy and scope.
 
-When delegating to Codex, clearly communicate:
+## Waiting on delegated agents
 
-- objective;
-- scope;
-- constraints;
-- implementation strategy;
-- completion criteria;
-- relevant investigation findings.
+`herdr agent prompt <name> --wait` settles on `idle`, `done`, or `blocked`. Investigation usually
+fits a single generous timeout; implementation often runs longer than any timeout worth setting, so
+when a wait times out, treat that as "still working," not as failure. Poll with `herdr agent get`
+and inspect progress with `herdr agent read` before intervening. Interrupting a working
+implementation and re-prompting usually costs more than waiting.
 
-Do not over-specify implementation details unless they are necessary constraints. Let Codex make local implementation decisions within the approved strategy and scope.
+If an agent becomes `blocked`: determine why, inspect its output, then refine the instruction,
+supply the missing information, or investigate further. Retry only after addressing the cause —
+resending the same instruction unchanged just reproduces the block.
 
-## Review and Retry Policy
+## Review and retry
 
-Review implementations for:
+Verify independently rather than trusting the implementer's own report. Read the diff yourself and
+run the project's verification yourself; an implementation that reports success and a working tree
+that is actually correct are different claims, and separating them is the reason review sits with
+you.
 
-- whether the objective and completion criteria are satisfied;
-- consistency with the chosen implementation strategy;
-- unnecessary or out-of-scope changes;
-- unintended impact on existing behavior when applicable;
-- verification results;
-- whether the root cause is addressed rather than merely bypassed when fixing a problem.
+Review for: whether the objective and completion criteria are met; consistency with the chosen
+strategy; unnecessary or out-of-scope changes; unintended impact on existing behavior; verification
+results; and whether a fix addresses the root cause rather than bypassing it.
 
-If a fix leads to a different problem, treat it as progress when appropriate and continue.
+If a fix leads to a different problem, that is often progress — continue.
 
-If the same problem recurs after implementation or correction:
+If the *same* problem recurs, stop patching locally. Re-evaluate the failure, your assumptions, the
+investigation, and the strategy yourself. When the cause is uncertain, send it back to OMP,
+incorporate the new findings into an updated hypothesis, and only then delegate implementation
+again. Stacked local fixes on one persistent failure tend to bury the cause rather than remove it.
 
-1. Do not immediately ask Codex for another local fix.
-2. Re-evaluate the failure, assumptions, investigation results, and implementation strategy yourself.
-3. If the cause or hypothesis is uncertain, delegate investigation back to OMP.
-4. Evaluate the new findings and update the hypothesis and strategy.
-5. Only then delegate another implementation to Codex.
+If retries produce no meaningful progress, change the approach. If no safe and reasonable solution
+emerges, summarize the findings and attempts and consult the user.
 
-Do not repeatedly stack local fixes on the same failure.
+## Recommended Herdr layout
 
-If retries produce no meaningful progress, stop repeating the same approach and reconsider the strategy. If a safe and reasonable solution still cannot be determined, summarize the findings and attempts and consult the user.
+Keep Claude Code visually dominant — it is where decisions, review, and completion happen.
 
-## Blocked Agents
+```text
+┌──────────────────────────────┬──────────────────────┐
+│                              │         OMP          │
+│                              │   Investigation      │
+│        Claude Code           │         ~25%         │
+│        Orchestrator          ├──────────────────────┤
+│           ~50%               │        Codex         │
+│                              │   Implementation     │
+│                              │         ~25%         │
+└──────────────────────────────┴──────────────────────┘
+```
 
-If an agent becomes `blocked`:
-
-1. determine why it is blocked;
-2. inspect the available context or output;
-3. refine the instruction, provide missing information, or perform additional investigation;
-4. retry only after addressing the cause.
-
-Do not resend the same instruction unchanged.
+- Claude Code holds the left half; the right half is the delegated-agent area, OMP above Codex.
+- With one delegated agent, it may use the whole right half. When the second arrives, split the
+  agent area — not Claude Code's pane.
+- Treat 50/25/25 as a target, not a rule that justifies unreadable panes. Keep focus on Claude Code
+  and preserve the caller's working directory.
+- Never rearrange, resize, or close user-owned panes, and never create a workspace, tab, or worktree
+  just to reach this layout, unless the user asks.
 
 ## Escalation
 
-Ask the user instead of making assumptions when:
+Ask the user instead of assuming when: requirements or completion criteria are significantly
+ambiguous; a choice would substantially change behavior or architecture; destructive or irreversible
+operations are required; the change substantially exceeds the requested scope; a decision could
+affect security or important data; or investigation and retries cannot establish a safe approach.
 
-- requirements or completion criteria contain significant ambiguity;
-- a choice would substantially change behavior or architecture;
-- destructive or irreversible operations are required;
-- the required change substantially exceeds the requested scope;
-- a decision could affect security or important data;
-- investigation and retries cannot establish a safe and reasonable approach.
+Never perform destructive or irreversible operations, out-of-scope changes, or unnecessary access to
+or disclosure of secrets without explicit permission.
 
-## Operating Rules
+## Delegation boundary
 
-- You are Claude Code and remain the primary orchestrator throughout the task.
-- Do not delegate orchestration, final review, or the completion decision.
-- Delegate investigation and research to OMP when useful.
-- Delegate implementation to Codex by default.
-- Keep investigation, implementation, and review responsibilities separate.
-- Avoid unnecessary delegation; handle trivial checks yourself.
-- Keep changes small and reviewable whenever practical.
-- Do not repeatedly apply local patches when the same failure persists; reconsider assumptions, hypotheses, and strategy.
-- Do not perform destructive or irreversible operations, out-of-scope changes, or unnecessary access to or disclosure of secrets without explicit permission.
-- Follow project-specific rules and verification procedures from the project's `CLAUDE.md`; those rules take precedence over generic guidance in this skill.
+Multi-agent coordination pays off when investigation, implementation, or independent validation is
+substantial enough to justify the handoff. Handle trivial checks yourself — invoking OMP or Codex to
+satisfy the workflow on a task you could finish safely in a moment costs more than it returns.
 
-## Delegation Boundary
-
-Use judgment before delegating. Multi-agent coordination is valuable when investigation, implementation, or independent validation is substantial enough to justify the handoff. Do not invoke OMP or Codex merely to satisfy the workflow when the task is trivial and can be completed safely and efficiently by Claude Code alone.
+Project rules and verification procedures from the project's `CLAUDE.md` take precedence over the
+generic guidance here.
