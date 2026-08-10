@@ -1,0 +1,46 @@
+{
+    "name": "j1nn0/laravel-encrypted-s3",
+    "description": "Laravel filesystem adapter for AWS S3 Client-Side Encryption V3.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2",
+        "ext-openssl": "*",
+        "aws/aws-sdk-php": "^3.368",
+        "illuminate/filesystem": "^12.0 || ^13.0",
+        "illuminate/support": "^12.0 || ^13.0",
+        "illuminate/contracts": "^12.0 || ^13.0",
+        "league/flysystem": "^3.29",
+        "league/flysystem-aws-s3-v3": "^3.29"
+    },
+    "require-dev": {
+        "orchestra/testbench": "^10.0 || ^11.0",
+        "phpunit/phpunit": "^11.5 || ^12.0 || ^13.0",
+        "laravel/pint": "^1.0",
+        "phpstan/phpstan": "^2.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "J1nn0\\EncryptedS3\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "J1nn0\\EncryptedS3\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "J1nn0\\EncryptedS3\\EncryptedS3ServiceProvider"
+            ]
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/phpunit",
+        "lint": "vendor/bin/pint --test",
+        "analyse": "vendor/bin/phpstan analyse --memory-limit=512M"
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
+}
