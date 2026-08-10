@@ -65,6 +65,42 @@ Codex is responsible for:
 - updating documentation when necessary;
 - reporting the resulting changes and verification results.
 
+## Recommended Herdr Layout
+
+Keep Claude Code visually dominant because it is the primary orchestrator and the place where decisions, review, and completion happen.
+
+When both delegated agents are active, prefer this layout in the current tab:
+
+```text
+┌──────────────────────────────┬──────────────────────┐
+│                              │                      │
+│                              │         OMP          │
+│                              │   Investigation      │
+│                              │       ~25%           │
+│        Claude Code           ├──────────────────────┤
+│        Orchestrator          │                      │
+│           ~50%               │        Codex         │
+│                              │   Implementation     │
+│                              │       ~25%           │
+└──────────────────────────────┴──────────────────────┘
+```
+
+Layout policy:
+
+- Keep Claude Code in the left half of the tab whenever practical.
+- Use the right half as the delegated-agent area.
+- Place OMP in the upper-right pane and Codex in the lower-right pane when both are active.
+- If only one delegated agent is active, it may use the entire right half.
+- When adding the second delegated agent, split the existing right-side agent area into upper and lower panes instead of splitting Claude Code's pane again.
+- Keep focus on Claude Code for background delegation unless the user explicitly asks to focus another pane.
+- Preserve the current working directory for delegated panes unless the task requires a different location.
+- Reuse suitable existing agent panes when practical instead of creating unnecessary panes.
+- Treat the 50% / 25% / 25% ratio as a preferred target, not a requirement that justifies making panes unreadable.
+- Do not rearrange, move, resize, or close user-owned panes merely to force this layout. If the current tab cannot accommodate it cleanly, use the closest readable layout and preserve the user's existing workspace.
+- Do not create a new workspace, tab, or worktree solely to achieve this layout unless the user explicitly requests it.
+
+Use the `herdr` skill as the authority for the actual pane inspection, split, focus, and agent-start commands. This skill defines the desired topology, not Herdr CLI syntax.
+
 ## Workflow
 
 1. Define the objective, constraints, scope, and completion criteria.
