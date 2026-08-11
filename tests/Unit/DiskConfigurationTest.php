@@ -91,6 +91,71 @@ final class DiskConfigurationTest extends TestCase
         DiskConfiguration::fromArray(self::configWith(['kms' => 'invalid']));
     }
 
+    public function test_from_array_rejects_unknown_encryption_options(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('The encryption option encryption_contxet is not supported.');
+
+        DiskConfiguration::fromArray(self::configWith([
+            'encryption' => ['encryption_contxet' => ['tenant' => '123']],
+        ]));
+    }
+
+    public function test_from_array_rejects_unknown_kms_options(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('The KMS option unknown is not supported.');
+
+        DiskConfiguration::fromArray(self::configWith([
+            'kms' => ['unknown' => 'value'],
+        ]));
+    }
+
+    public function test_from_array_rejects_path_style_endpoint_in_kms_options(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('The KMS option use_path_style_endpoint is not supported.');
+
+        DiskConfiguration::fromArray(self::configWith([
+            'kms' => ['use_path_style_endpoint' => true],
+        ]));
+    }
+
+    public function test_from_array_accepts_every_allowlisted_encryption_and_kms_option(): void
+    {
+        $configuration = DiskConfiguration::fromArray(self::configWith([
+            'kms' => [
+                'key_id' => 'kms-key-id',
+                'region' => 'kms-region',
+                'key' => 'kms-access-key',
+                'secret' => 'kms-secret-key',
+                'token' => 'kms-session-token',
+                'credentials' => ['key' => 'credentials-key', 'secret' => 'credentials-secret'],
+                'endpoint' => 'http://kms.test',
+                'handler' => static function (): never {
+                    throw new \LogicException('not called');
+                },
+                'http_handler' => static function (): never {
+                    throw new \LogicException('not called');
+                },
+                'debug' => false,
+                'retries' => ['max_attempts' => 1],
+                'http' => ['timeout' => 10],
+            ],
+            'encryption' => [
+                'commitment_policy' => EncryptionOptions::COMMITMENT_POLICY_REQUIRE_ENCRYPT_ALLOW_DECRYPT,
+                'security_profile' => EncryptionOptions::SECURITY_PROFILE_V3,
+                'encryption_context' => ['tenant' => '123'],
+                'allow_decrypt_with_any_cmk' => true,
+            ],
+        ]));
+
+        self::assertSame('kms-key-id', $configuration->kmsKeyId());
+        self::assertSame('kms-region', $configuration->kms()['region']);
+        self::assertSame(['tenant' => '123'], $configuration->encryptionOptions()->encryptionContext);
+        self::assertTrue($configuration->encryptionOptions()->allowDecryptWithAnyCmk);
+    }
+
     /**
      * @param  array<string, mixed>  $config
      */

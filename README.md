@@ -68,12 +68,16 @@ This is a complete disk configuration example:
 ],
 ```
 
+Unknown keys under the `encryption` and `kms` blocks are rejected at
+disk-construction time. This is deliberate: typos in security-relevant
+settings fail loudly rather than silently falling back to a default.
+
 These optional AWS SDK client settings are forwarded — `endpoint`,
 `use_path_style_endpoint`, `retries`, `http`, `http_handler`, `handler`, and
 `debug`. Anything else in the disk configuration is ignored rather than passed
 to the SDK. The common settings may be set under `kms` for the KMS client;
-`use_path_style_endpoint` is S3-only, and these common settings are never
-inherited from the disk. Region and credentials are the exception: the KMS
+`use_path_style_endpoint` is S3-only and is rejected under `kms`, and these
+common settings are never inherited from the disk. Region and credentials are the exception: the KMS
 client inherits both from the disk when they are not set under `kms`. A
 `credentials` array takes precedence over `key`, `secret`, and `token` at the
 same level.

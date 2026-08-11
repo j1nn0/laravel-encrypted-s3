@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace J1nn0\EncryptedS3\Tests\Unit;
 
+use J1nn0\EncryptedS3\Exceptions\InvalidConfigurationException;
 use J1nn0\EncryptedS3\Support\AwsClientSettings;
 use J1nn0\EncryptedS3\Support\DiskConfiguration;
 use PHPUnit\Framework\TestCase;
@@ -123,7 +124,7 @@ final class AwsClientSettingsTest extends TestCase
         }
     }
 
-    public function test_for_kms_ignores_the_s3_only_path_style_setting(): void
+    public function test_for_kms_passes_optional_settings_except_the_s3_only_path_style_setting(): void
     {
         $httpHandler = new stdClass;
         $handler = new stdClass;
@@ -133,7 +134,6 @@ final class AwsClientSettingsTest extends TestCase
                 'http_handler' => $httpHandler,
                 'handler' => $handler,
                 'debug' => true,
-                'use_path_style_endpoint' => 0,
                 'retries' => 2,
                 'http' => ['timeout' => 3],
             ],
@@ -143,9 +143,18 @@ final class AwsClientSettingsTest extends TestCase
         self::assertSame($httpHandler, $settings['http_handler']);
         self::assertSame($handler, $settings['handler']);
         self::assertTrue($settings['debug']);
-        self::assertArrayNotHasKey('use_path_style_endpoint', $settings);
         self::assertSame(2, $settings['retries']);
         self::assertSame(['timeout' => 3], $settings['http']);
+    }
+
+    public function test_for_kms_rejects_the_s3_only_path_style_setting(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('The KMS option use_path_style_endpoint is not supported.');
+
+        $this->settings([
+            'kms' => ['use_path_style_endpoint' => false],
+        ])->forKms();
     }
 
     public function test_kms_optional_settings_are_not_inherited_from_the_disk(): void

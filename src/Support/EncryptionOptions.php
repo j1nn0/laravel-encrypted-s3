@@ -44,6 +44,16 @@ final class EncryptionOptions
     /**
      * @var list<string>
      */
+    private const CONFIG_KEYS = [
+        'commitment_policy',
+        'security_profile',
+        'encryption_context',
+        'allow_decrypt_with_any_cmk',
+    ];
+
+    /**
+     * @var list<string>
+     */
     private const RESERVED_CONTEXT_KEYS = [
         'aws:x-amz-cek-alg',
         'kms_cmk_id',
@@ -91,6 +101,8 @@ final class EncryptionOptions
      */
     public static function fromConfig(array $config): self
     {
+        self::assertKnownConfigKeys($config);
+
         $commitmentPolicy = $config['commitment_policy']
             ?? self::COMMITMENT_POLICY_REQUIRE_ENCRYPT_REQUIRE_DECRYPT;
         $securityProfile = $config['security_profile'] ?? self::SECURITY_PROFILE_V3;
@@ -115,6 +127,20 @@ final class EncryptionOptions
             $encryptionContext,
             $allowDecryptWithAnyCmk,
         );
+    }
+
+    /**
+     * @param  array<mixed, mixed>  $config
+     */
+    private static function assertKnownConfigKeys(array $config): void
+    {
+        foreach (array_keys($config) as $key) {
+            if (! is_string($key) || ! in_array($key, self::CONFIG_KEYS, true)) {
+                throw new InvalidConfigurationException(
+                    "The encryption option {$key} is not supported.",
+                );
+            }
+        }
     }
 
     /**

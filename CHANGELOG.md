@@ -4,8 +4,6 @@ All notable changes to this project are documented here.
 
 ## [Unreleased]
 
-## [1.0.0]
-
 Initial stable release of a Laravel filesystem driver for AWS S3 Client-Side
 Encryption V3. Cryptography is delegated to the AWS SDK.
 
@@ -19,6 +17,8 @@ Encryption V3. Cryptography is delegated to the AWS SDK.
 - Unsupported and encryption-incompatible disk put options are rejected when
   the disk is constructed.
 - `size()` returns the stored ciphertext size, not the plaintext size.
+- Unknown keys under the `encryption` and `kms` configuration blocks are
+  rejected at disk-construction time.
 
 ### Security
 

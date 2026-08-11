@@ -12,6 +12,24 @@ use J1nn0\EncryptedS3\Exceptions\InvalidConfigurationException;
 final class DiskConfiguration
 {
     /**
+     * @var list<string>
+     */
+    private const KMS_CONFIG_KEYS = [
+        'key_id',
+        'region',
+        'key',
+        'secret',
+        'token',
+        'credentials',
+        'endpoint',
+        'handler',
+        'http_handler',
+        'debug',
+        'retries',
+        'http',
+    ];
+
+    /**
      * @param  array<string, mixed>  $kms
      * @param  array<string, mixed>  $putOptions
      * @param  array<string, mixed>  $raw
@@ -45,6 +63,8 @@ final class DiskConfiguration
             throw new InvalidConfigurationException('The KMS configuration must be an array.');
         }
 
+        self::assertKnownKmsConfigKeys($kmsConfig);
+
         $kmsKeyId = $kmsConfig['key_id'] ?? null;
 
         if (! is_string($kmsKeyId) || trim($kmsKeyId) === '') {
@@ -65,6 +85,20 @@ final class DiskConfiguration
             $kmsConfig,
             $config,
         );
+    }
+
+    /**
+     * @param  array<mixed, mixed>  $config
+     */
+    private static function assertKnownKmsConfigKeys(array $config): void
+    {
+        foreach (array_keys($config) as $key) {
+            if (! is_string($key) || ! in_array($key, self::KMS_CONFIG_KEYS, true)) {
+                throw new InvalidConfigurationException(
+                    "The KMS option {$key} is not supported.",
+                );
+            }
+        }
     }
 
     public function bucket(): string
