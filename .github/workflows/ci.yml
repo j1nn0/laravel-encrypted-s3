@@ -103,3 +103,46 @@ jobs:
 
       - name: Run static analysis
         run: composer analyse
+
+      - name: Run dependency audit
+        run: composer audit
+
+  integration:
+    name: Integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: openssl
+          coverage: none
+          tools: composer:v2
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-integration-composer-${{ hashFiles('**/composer.json') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress --with-all-dependencies
+
+      - name: Start Moto
+        run: docker compose up -d --wait
+
+      - name: Run integration tests
+        run: composer test:integration
+
+      - name: Stop Moto
+        if: always()
+        run: docker compose down -v
