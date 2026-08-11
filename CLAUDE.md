@@ -34,7 +34,7 @@ Four layers, wired top-down by `EncryptedS3DiskFactory::make()`:
    credentials fall back to the disk's). The factory assembles the stack and passes the raw disk
    config through to Laravel/Flysystem. Config errors throw `InvalidConfigurationException` at
    disk-construction time, not on first I/O. The factory does not inject a default `ACL`; explicit
-   disk or per-call visibility is handled by `EncryptedS3Arguments::forPut()` —
+   disk or per-call visibility and raw `ACL` options are handled by `EncryptedS3Arguments::forPut()` —
    `docs/adr/0004-omit-default-acl-on-encrypted-writes.md` supersedes
    `docs/adr/0002-default-acl-injection.md`.
 3. `Flysystem\EncryptedS3Adapter` — the split point. `read`/`readStream`/`write`/`writeStream` go

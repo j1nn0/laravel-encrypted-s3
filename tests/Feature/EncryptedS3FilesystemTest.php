@@ -373,6 +373,33 @@ final class EncryptedS3FilesystemTest extends TestCase
         self::assertArrayNotHasKey('x-amz-acl', $request['headers']);
     }
 
+    public function test_a_disk_with_an_explicit_acl_option_sends_that_acl(): void
+    {
+        $this->configureDisk([
+            'options' => ['ACL' => 'bucket-owner-full-control'],
+        ]);
+
+        Storage::disk()->put('explicit-acl.txt', 'body');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('bucket-owner-full-control', $request['headers']['x-amz-acl'] ?? null);
+    }
+
+    public function test_disk_visibility_overrides_an_explicit_acl_option(): void
+    {
+        $this->configureDisk([
+            'options' => ['ACL' => 'bucket-owner-full-control'],
+            'visibility' => 'private',
+        ]);
+
+        Storage::disk()->put('visibility-overrides-acl.txt', 'body');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('private', $request['headers']['x-amz-acl'] ?? null);
+    }
+
     public function test_a_disk_with_private_visibility_sends_a_private_acl(): void
     {
         $this->configureDisk(['visibility' => 'private']);

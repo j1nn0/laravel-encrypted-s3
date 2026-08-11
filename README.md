@@ -75,11 +75,12 @@ to the SDK. The common settings may be set under `kms` for the KMS client;
 `use_path_style_endpoint` is S3-only. Unlike the region and credentials, common
 settings are not inherited from the disk.
 
-`root` is an S3 key prefix. `visibility` is optional and controls the S3 ACL
-for encrypted writes; when it is omitted, encrypted writes send no ACL. This
-works with buckets using S3 Object Ownership = `Bucket owner enforced`. Set
-`visibility` on the disk or on an individual write to send the matching canned
-ACL. `throw` retains Laravel's normal filesystem exception behavior.
+`root` is an S3 key prefix. Encrypted writes send no ACL unless the user asks
+for one through `visibility` or an explicit `ACL` PutObject option. If both are
+set, `visibility` wins. `options['ACL']` is the route for canned ACLs that
+Flysystem visibility cannot express, such as `bucket-owner-full-control`, which
+is accepted by ACL-disabled buckets. `throw` retains Laravel's normal
+filesystem exception behavior.
 `options` is filtered to Flysystem's supported S3 `PutObject` parameters before
 being merged into encrypted requests. `Metadata`, `Body`, `Bucket`, `Key`, and
 keys beginning with `@` are reserved and rejected or omitted. `ContentLength`,
@@ -146,7 +147,7 @@ implementation is not streaming internally.
 
 | Operation | Support | Meaning and constraints |
 | --- | --- | --- |
-| `put` / `write` | Supported with constraints | Stored encrypted with CSE. No ACL is sent unless `visibility` is explicitly configured. The SDK holds the complete plaintext in memory; watch `memory_limit` for large objects. |
+| `put` / `write` | Supported with constraints | Stored encrypted with CSE. No ACL is sent unless requested through `visibility` or an explicit `options['ACL']`; `visibility` wins when both are set. The SDK holds the complete plaintext in memory; watch `memory_limit` for large objects. |
 | `get` / `read` | Supported with constraints | Returns decrypted plaintext. The complete ciphertext is held in memory. |
 | `writeStream` | Supported with constraints | Works, but is not memory-efficient because the SDK CSE implementation is non-streaming. |
 | `readStream` | Supported with constraints | The returned resource is backed by decrypted plaintext held in memory. |
