@@ -84,6 +84,10 @@ supporting evidence.
 Investigation is not limited to existing code. For new projects, use OMP for the technical research
 that improves the implementation decision.
 
+For official documentation research involving a library, framework, SDK, API, CLI tool, or cloud
+service, use the `find-docs` skill when it is available to OMP and follow its workflow. If it is
+unavailable, use the primary official documentation directly.
+
 **OMP is read-only.** OMP and Codex share one working directory and one git working tree, so two
 agents writing at once can corrupt each other's work. State the read-only constraint in the prompt
 you send, and keep file modification exclusively with Codex.
