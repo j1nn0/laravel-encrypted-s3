@@ -236,6 +236,16 @@ final class EncryptedS3FilesystemTest extends TestCase
         Storage::disk();
     }
 
+    public function test_incompatible_put_option_is_rejected_at_disk_construction_time(): void
+    {
+        $this->configureDisk(['options' => ['ContentLength' => 123]]);
+
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('The S3 put option ContentLength is incompatible with client-side encryption.');
+
+        Storage::disk();
+    }
+
     public function test_legacy_security_profile_is_rejected_with_a_security_reason(): void
     {
         $this->configureDisk([

@@ -82,7 +82,14 @@ works with buckets using S3 Object Ownership = `Bucket owner enforced`. Set
 ACL. `throw` retains Laravel's normal filesystem exception behavior.
 `options` is filtered to Flysystem's supported S3 `PutObject` parameters before
 being merged into encrypted requests. `Metadata`, `Body`, `Bucket`, `Key`, and
-keys beginning with `@` are reserved and rejected or omitted.
+keys beginning with `@` are reserved and rejected or omitted. `ContentLength`,
+`MetadataDirective`, `CopySourceSSECustomerAlgorithm`,
+`CopySourceSSECustomerKey`, and `CopySourceSSECustomerKeyMD5` are rejected
+because the first contradicts the ciphertext body and the others are
+CopyObject-only. `ServerSideEncryption`, `SSEKMSKeyId`,
+`SSECustomerAlgorithm`, `SSECustomerKey`, and `SSECustomerKeyMD5` are rejected
+because server-side encryption is out of scope for CSE, and SSE-C would make
+objects unreadable through this package.
 
 The encrypted read and write paths omit a default ACL, but delegated operations
 keep the upstream Flysystem S3 behavior. `visibility()` reads the object ACL

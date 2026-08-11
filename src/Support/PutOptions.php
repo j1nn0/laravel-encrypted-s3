@@ -19,6 +19,22 @@ final class PutOptions
             || str_starts_with($key, '@');
     }
 
+    public static function isIncompatibleWithEncryption(string $key): bool
+    {
+        return in_array($key, [
+            'ContentLength',
+            'MetadataDirective',
+            'CopySourceSSECustomerAlgorithm',
+            'CopySourceSSECustomerKey',
+            'CopySourceSSECustomerKeyMD5',
+            'ServerSideEncryption',
+            'SSEKMSKeyId',
+            'SSECustomerAlgorithm',
+            'SSECustomerKey',
+            'SSECustomerKeyMD5',
+        ], true);
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -40,6 +56,12 @@ final class PutOptions
 
                 throw new InvalidConfigurationException('The S3 put options contain a reserved key.');
             }
+
+            if (self::isIncompatibleWithEncryption($key)) {
+                throw new InvalidConfigurationException(
+                    "The S3 put option {$key} is incompatible with client-side encryption.",
+                );
+            }
         }
 
         return $options;
@@ -54,7 +76,11 @@ final class PutOptions
         $filtered = [];
 
         foreach ($options as $key => $value) {
-            if (! is_string($key) || self::isReserved($key)) {
+            if (
+                ! is_string($key)
+                || self::isReserved($key)
+                || self::isIncompatibleWithEncryption($key)
+            ) {
                 continue;
             }
 

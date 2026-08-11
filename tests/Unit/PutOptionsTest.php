@@ -21,15 +21,48 @@ final class PutOptionsTest extends TestCase
         yield 'bucket' => ['Bucket', true];
         yield 'key' => ['Key', true];
         yield 'internal option' => ['@MetadataStrategy', true];
+        yield 'content length' => ['ContentLength', false];
+        yield 'metadata directive' => ['MetadataDirective', false];
+        yield 'copy source SSE customer algorithm' => ['CopySourceSSECustomerAlgorithm', false];
+        yield 'copy source SSE customer key' => ['CopySourceSSECustomerKey', false];
+        yield 'copy source SSE customer key MD5' => ['CopySourceSSECustomerKeyMD5', false];
+        yield 'server-side encryption' => ['ServerSideEncryption', false];
+        yield 'SSE KMS key ID' => ['SSEKMSKeyId', false];
+        yield 'SSE customer algorithm' => ['SSECustomerAlgorithm', false];
+        yield 'SSE customer key' => ['SSECustomerKey', false];
+        yield 'SSE customer key MD5' => ['SSECustomerKeyMD5', false];
         yield 'cache control' => ['CacheControl', false];
         yield 'acl' => ['ACL', false];
         yield 'storage class' => ['StorageClass', false];
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function incompatibleOptionProvider(): iterable
+    {
+        yield 'content length' => ['ContentLength'];
+        yield 'metadata directive' => ['MetadataDirective'];
+        yield 'copy source SSE customer algorithm' => ['CopySourceSSECustomerAlgorithm'];
+        yield 'copy source SSE customer key' => ['CopySourceSSECustomerKey'];
+        yield 'copy source SSE customer key MD5' => ['CopySourceSSECustomerKeyMD5'];
+        yield 'server-side encryption' => ['ServerSideEncryption'];
+        yield 'SSE KMS key ID' => ['SSEKMSKeyId'];
+        yield 'SSE customer algorithm' => ['SSECustomerAlgorithm'];
+        yield 'SSE customer key' => ['SSECustomerKey'];
+        yield 'SSE customer key MD5' => ['SSECustomerKeyMD5'];
     }
 
     #[DataProvider('reservedOptionProvider')]
     public function test_is_reserved_identifies_owned_and_unowned_options(string $key, bool $expected): void
     {
         self::assertSame($expected, PutOptions::isReserved($key));
+    }
+
+    #[DataProvider('incompatibleOptionProvider')]
+    public function test_is_incompatible_with_encryption_identifies_incompatible_options(string $key): void
+    {
+        self::assertTrue(PutOptions::isIncompatibleWithEncryption($key));
     }
 
     public function test_validated_rejects_non_array_options(): void
@@ -64,6 +97,15 @@ final class PutOptionsTest extends TestCase
         PutOptions::validated(['Metadata' => ['invalid' => 'value']]);
     }
 
+    #[DataProvider('incompatibleOptionProvider')]
+    public function test_validated_rejects_options_incompatible_with_encryption(string $key): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage("The S3 put option {$key} is incompatible with client-side encryption.");
+
+        PutOptions::validated([$key => 'invalid']);
+    }
+
     public function test_validated_returns_valid_options_unchanged(): void
     {
         $options = [
@@ -87,6 +129,18 @@ final class PutOptionsTest extends TestCase
         ];
 
         self::assertSame(['CacheControl' => 'max-age=60'], PutOptions::filtered($options));
+    }
+
+    #[DataProvider('incompatibleOptionProvider')]
+    public function test_filtered_removes_options_incompatible_with_encryption(string $key): void
+    {
+        self::assertSame(
+            ['CacheControl' => 'max-age=60'],
+            PutOptions::filtered([
+                $key => 'unsafe',
+                'CacheControl' => 'max-age=60',
+            ]),
+        );
     }
 
     public function test_filtered_removes_options_outside_the_s3_allowlist(): void
