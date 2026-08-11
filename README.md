@@ -94,7 +94,10 @@ CopyObject-only. `ServerSideEncryption`, `SSEKMSKeyId`,
 `SSECustomerAlgorithm`, `SSECustomerKey`, and `SSECustomerKeyMD5` are rejected
 because server-side encryption is out of scope for CSE, and SSE-C would make
 objects unreadable through this package. The upstream Flysystem option constant
-is used only as a test tripwire, not as this allowlist.
+is used only as a test tripwire, not as this allowlist. Disk `options` outside
+this allowlist are rejected at configuration time to catch mistakes; per-call
+runtime `Config` is broader because it also carries Laravel/Flysystem keys such
+as `visibility` and `mimetype`, so unsupported keys are silently stripped there.
 
 The encrypted read and write paths omit a default ACL, but delegated operations
 keep the upstream Flysystem S3 behavior. `visibility()` reads the object ACL

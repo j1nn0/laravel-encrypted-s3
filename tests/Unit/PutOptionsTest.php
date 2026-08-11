@@ -124,6 +124,16 @@ final class PutOptionsTest extends TestCase
         PutOptions::validated([$key => 'invalid']);
     }
 
+    public function test_validated_rejects_options_outside_the_package_allowlist(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage(
+            'The S3 put option CacheContol is not supported by client-side encryption.',
+        );
+
+        PutOptions::validated(['CacheContol' => 'max-age=60']);
+    }
+
     public function test_validated_returns_valid_options_unchanged(): void
     {
         $options = [

@@ -87,9 +87,11 @@ These are the point of the package. Several are enforced in more than one place;
   request-time allowlist: `ACL`, `CacheControl`, `ContentDisposition`, `ContentEncoding`,
   `ContentType`, `Expires`, `GrantFullControl`, `GrantRead`, `GrantReadACP`, `GrantWriteACP`,
   `RequestPayer`, `StorageClass`, `Tagging`, `WebsiteRedirectLocation`, and `ChecksumAlgorithm`.
-  Both rules are enforced at both points —
-  `PutOptions::validated()` rejects at config time, and `PutOptions::filtered()` strips again at
-  request time. `AwsS3V3Adapter::AVAILABLE_OPTIONS` is only a test tripwire for reclassification.
+  `PutOptions::validated()` rejects reserved, incompatible, and unsupported disk options at config
+  time. `PutOptions::filtered()` strips those keys again at request time and silently drops other
+  unsupported keys because it receives the broader Flysystem runtime `Config`, including keys such
+  as `visibility` and `mimetype`. `AwsS3V3Adapter::AVAILABLE_OPTIONS` is only a test tripwire for
+  reclassification.
   Reserved encryption-context keys: `aws:x-amz-cek-alg`, `kms_cmk_id`.
 - **Failure messages constructed by the package are redacted.** `Support\SafeFailureReason::from()`
   deliberately reduces a throwable to its short class name plus an AWS error code. PHP stack-trace

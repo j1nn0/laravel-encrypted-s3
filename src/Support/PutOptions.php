@@ -82,6 +82,12 @@ final class PutOptions
                     "The S3 put option {$key} is incompatible with client-side encryption.",
                 );
             }
+
+            if (! self::isSupportedByEncryption($key)) {
+                throw new InvalidConfigurationException(
+                    "The S3 put option {$key} is not supported by client-side encryption.",
+                );
+            }
         }
 
         return $options;

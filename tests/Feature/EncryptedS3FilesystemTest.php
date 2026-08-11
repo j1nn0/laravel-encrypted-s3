@@ -359,6 +359,20 @@ final class EncryptedS3FilesystemTest extends TestCase
         self::assertArrayNotHasKey('custom-option', $request['headers']);
     }
 
+    public function test_a_disk_with_an_unsupported_put_option_is_rejected_at_construction(): void
+    {
+        $this->configureDisk([
+            'options' => ['CacheContol' => 'max-age=60'],
+        ]);
+
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage(
+            'The S3 put option CacheContol is not supported by client-side encryption.',
+        );
+
+        Storage::disk();
+    }
+
     public function test_a_disk_without_a_visibility_key_sends_no_acl(): void
     {
         $config = $this->diskConfig();
