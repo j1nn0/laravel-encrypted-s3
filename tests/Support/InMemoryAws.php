@@ -6,11 +6,13 @@ namespace J1nn0\EncryptedS3\Tests\Support;
 
 use Aws\Api\DateTimeResult;
 use Aws\CommandInterface;
+use Aws\Kms\Exception\KmsException;
 use Aws\Result;
 use Aws\S3\Exception\S3Exception;
 use GuzzleHttp\Promise\Create;
 use GuzzleHttp\Psr7\Response;
 use GuzzleHttp\Psr7\Utils;
+use LogicException;
 use Psr\Http\Message\RequestInterface;
 
 final class InMemoryAws
@@ -26,13 +28,15 @@ final class InMemoryAws
     public array $s3Requests = [];
 
     /**
-     * @var list<array{target: string, body: string}>
+     * @var list<array{target: string, body: string, headers: array<string, string>, uri: string}>
      */
     public array $kmsRequests = [];
 
     private string $dataKey = '01234567890123456789012345678901';
 
     private string $ciphertextBlob = 'deterministic-ciphertext-blob';
+
+    private ?string $kmsErrorCode = null;
 
     public function s3Handler(): callable
     {
@@ -46,6 +50,11 @@ final class InMemoryAws
         return function (CommandInterface $command, RequestInterface $request) {
             return Create::promiseFor($this->handleKms($command, $request));
         };
+    }
+
+    public function failKmsWith(string $errorCode): void
+    {
+        $this->kmsErrorCode = $errorCode;
     }
 
     /**
@@ -98,11 +107,15 @@ final class InMemoryAws
             'GetObject' => $this->getObject($command, $key),
             'HeadObject' => $this->headObject($command, $key),
             'DeleteObject' => $this->deleteObject($key),
+            'DeleteObjects' => $this->deleteObjects($command),
             'CopyObject' => $this->copyObject($command, $request, $key, $requestHeaders),
+            'ListObjects' => $this->listObjects($command),
             'ListObjectsV2' => $this->listObjects($command),
             'PutObjectAcl' => new Result,
             'GetObjectAcl' => new Result(['Grants' => $this->grants()]),
-            default => new Result,
+            default => throw new LogicException(
+                'InMemoryAws received an unhandled S3 command: '.$command->getName()
+            ),
         };
     }
 
@@ -114,7 +127,19 @@ final class InMemoryAws
         $this->kmsRequests[] = [
             'target' => $target,
             'body' => $body,
+            'headers' => $this->headers($request),
+            'uri' => (string) $request->getUri(),
         ];
+
+        $errorCode = $this->kmsErrorCode;
+        $this->kmsErrorCode = null;
+
+        if ($errorCode !== null) {
+            throw new KmsException('KMS request failed.', $command, [
+                'code' => $errorCode,
+                'response' => new Response(400),
+            ]);
+        }
 
         return match ($command->getName()) {
             'GenerateDataKey' => new Result([
@@ -122,7 +147,9 @@ final class InMemoryAws
                 'Plaintext' => $this->dataKey,
             ]),
             'Decrypt' => new Result(['Plaintext' => $this->dataKey]),
-            default => new Result,
+            default => throw new LogicException(
+                'InMemoryAws received an unhandled KMS command: '.$command->getName()
+            ),
         };
     }
 
@@ -185,6 +212,23 @@ final class InMemoryAws
         unset($this->objects[$key]);
 
         return new Result;
+    }
+
+    // @phpstan-ignore-next-line missingType.iterableValue
+    private function deleteObjects(CommandInterface $command): Result
+    {
+        $delete = $command['Delete'] ?? [];
+        $objects = is_array($delete) && is_array($delete['Objects'] ?? null)
+            ? $delete['Objects']
+            : [];
+
+        foreach ($objects as $object) {
+            if (is_array($object) && is_string($object['Key'] ?? null)) {
+                unset($this->objects[$object['Key']]);
+            }
+        }
+
+        return new Result(['Deleted' => $objects]);
     }
 
     /**
