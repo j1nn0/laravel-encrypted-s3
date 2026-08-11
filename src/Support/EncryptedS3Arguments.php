@@ -6,7 +6,6 @@ namespace J1nn0\EncryptedS3\Support;
 
 use Aws\Crypto\MaterialsProviderV3;
 use Aws\S3\Crypto\HeadersMetadataStrategy;
-use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use League\Flysystem\AwsS3V3\VisibilityConverter;
 use League\Flysystem\Config;
 use League\MimeTypeDetection\MimeTypeDetector;
@@ -37,8 +36,8 @@ final class EncryptedS3Arguments
     public function forPut(string $path, $contents, Config $config): array
     {
         $options = array_merge(
-            $this->filterPutOptions($this->defaultPutOptions),
-            $this->filterPutOptions($config->toArray()),
+            PutOptions::filtered($this->defaultPutOptions),
+            PutOptions::filtered($config->toArray()),
         );
         $configuredMimeType = $config->get(self::OPTION_MIMETYPE);
         $configuredVisibility = $config->get(Config::OPTION_VISIBILITY);
@@ -79,27 +78,6 @@ final class EncryptedS3Arguments
                 '@KmsAllowDecryptWithAnyCmk' => $this->encryptionOptions->allowDecryptWithAnyCmk,
             ],
         );
-    }
-
-    /**
-     * @param  array<mixed, mixed>  $options
-     * @return array<string, mixed>
-     */
-    private function filterPutOptions(array $options): array
-    {
-        $filtered = [];
-
-        foreach ($options as $key => $value) {
-            if (! is_string($key) || EncryptionOptions::isReservedPutOption($key)) {
-                continue;
-            }
-
-            if (in_array($key, AwsS3V3Adapter::AVAILABLE_OPTIONS, true)) {
-                $filtered[$key] = $value;
-            }
-        }
-
-        return $filtered;
     }
 
     /**

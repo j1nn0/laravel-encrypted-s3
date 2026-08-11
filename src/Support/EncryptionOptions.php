@@ -117,39 +117,6 @@ final class EncryptionOptions
         );
     }
 
-    public static function isReservedPutOption(string $key): bool
-    {
-        return $key === 'Metadata'
-            || in_array($key, ['Body', 'Bucket', 'Key'], true)
-            || str_starts_with($key, '@');
-    }
-
-    /**
-     * @return array<string, mixed>
-     */
-    public static function validatePutOptions(mixed $options): array
-    {
-        if (! is_array($options)) {
-            throw new InvalidConfigurationException('The S3 put options must be an array.');
-        }
-
-        foreach ($options as $key => $_value) {
-            if (! is_string($key)) {
-                throw new InvalidConfigurationException('The S3 put options contain an invalid key.');
-            }
-
-            if (self::isReservedPutOption($key)) {
-                if ($key === 'Metadata') {
-                    throw new InvalidConfigurationException('The S3 Metadata option is reserved by client-side encryption.');
-                }
-
-                throw new InvalidConfigurationException('The S3 put options contain a reserved key.');
-            }
-        }
-
-        return $options;
-    }
-
     /**
      * @param  array<mixed>  $context
      */

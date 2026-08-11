@@ -70,9 +70,9 @@ These are the point of the package. Several are enforced in more than one place;
   `UnableToReadFile` and never return ciphertext or an unencrypted object as plaintext.
 - **No presigned URLs**, GET or PUT — either would bypass client-side crypto in one direction.
 - **Reserved put options.** `Metadata`, `Body`, `Bucket`, `Key`, and any `@`-prefixed key are
-  reserved. `EncryptionOptions::isReservedPutOption()` is the single definition of that rule; the
-  two enforcement points remain deliberate defence in depth — `EncryptionOptions::validatePutOptions()`
-  rejects at config time, `EncryptedS3Arguments::filterPutOptions()` strips again at request time.
+  reserved. `PutOptions::isReserved()` is the single definition of that rule; the two enforcement
+  points remain deliberate defence in depth — `PutOptions::validated()` rejects at config time,
+  `PutOptions::filtered()` strips again at request time.
   Surviving keys must be in `AwsS3V3Adapter::AVAILABLE_OPTIONS` (checked at request time only).
   Reserved encryption-context keys: `aws:x-amz-cek-alg`, `kms_cmk_id`.
 - **Never let plaintext, credentials, KMS key material, or envelope values reach an exception

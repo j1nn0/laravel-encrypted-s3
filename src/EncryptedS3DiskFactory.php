@@ -14,6 +14,7 @@ use J1nn0\EncryptedS3\Flysystem\EncryptedS3Adapter;
 use J1nn0\EncryptedS3\Support\EncryptedS3Arguments;
 use J1nn0\EncryptedS3\Support\EncryptionOptions;
 use J1nn0\EncryptedS3\Support\ObjectLocation;
+use J1nn0\EncryptedS3\Support\PutOptions;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use League\Flysystem\AwsS3V3\PortableVisibilityConverter;
 use League\Flysystem\Filesystem;
@@ -46,7 +47,7 @@ final class EncryptedS3DiskFactory
         }
 
         $encryptionOptions = EncryptionOptions::fromConfig($encryptionConfig);
-        $putOptions = EncryptionOptions::validatePutOptions($config['options'] ?? []);
+        $putOptions = PutOptions::validated($config['options'] ?? []);
         $visibility = new PortableVisibilityConverter;
         $mimeTypeDetector = new FinfoMimeTypeDetector;
         $root = is_string($config['root'] ?? '') ? $config['root'] : '';
