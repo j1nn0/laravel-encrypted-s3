@@ -433,18 +433,47 @@ final class EncryptedS3FilesystemTest extends TestCase
         self::assertTrue($disk->deleteDirectory('folder'));
     }
 
-    public function test_root_prefix_is_used_consistently_for_encrypted_and_delegated_operations(): void
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function rootProvider(): iterable
     {
-        $this->configureDisk(['root' => 'root-prefix']);
+        yield 'empty root' => [''];
+        yield 'root prefix' => ['root-prefix'];
+        yield 'root prefix with trailing slash' => ['root-prefix/'];
+        yield 'nested root prefix' => ['a/b'];
+    }
 
-        Storage::disk()->put('rooted.txt', 'rooted plaintext');
+    #[DataProvider('rootProvider')]
+    public function test_root_prefix_is_used_consistently_for_encrypted_and_delegated_operations(string $root): void
+    {
+        $this->configureDisk(['root' => $root]);
+        $disk = Storage::disk();
+        $prefix = rtrim($root, '\\/');
+        $expectedKey = $prefix === '' ? 'rooted.txt' : $prefix.'/rooted.txt';
+        $expectedCopyKey = $prefix === '' ? 'rooted-copy.txt' : $prefix.'/rooted-copy.txt';
 
-        self::assertArrayHasKey('root-prefix/rooted.txt', $this->aws->objects);
-        self::assertTrue(Storage::disk()->exists('rooted.txt'));
-        self::assertSame('rooted plaintext', Storage::disk()->get('rooted.txt'));
-        Storage::disk()->copy('rooted.txt', 'rooted-copy.txt');
-        self::assertSame('rooted plaintext', Storage::disk()->get('rooted-copy.txt'));
-        self::assertArrayHasKey('root-prefix/rooted-copy.txt', $this->aws->objects);
+        $disk->put('rooted.txt', 'rooted plaintext');
+
+        self::assertArrayHasKey($expectedKey, $this->aws->objects);
+        self::assertTrue($disk->exists('rooted.txt'));
+        self::assertSame('rooted plaintext', $disk->get('rooted.txt'));
+
+        $listedPaths = [];
+        foreach ($disk->listContents('', true) as $attribute) {
+            $listedPaths[] = $attribute->path();
+        }
+        self::assertContains('rooted.txt', $listedPaths);
+
+        $disk->copy('rooted.txt', 'rooted-copy.txt');
+        self::assertSame('rooted plaintext', $disk->get('rooted-copy.txt'));
+        self::assertArrayHasKey($expectedCopyKey, $this->aws->objects);
+
+        $listedPaths = [];
+        foreach ($disk->listContents('', true) as $attribute) {
+            $listedPaths[] = $attribute->path();
+        }
+        self::assertContains('rooted-copy.txt', $listedPaths);
     }
 
     public function test_storage_disk_integration_uses_the_discovered_provider(): void

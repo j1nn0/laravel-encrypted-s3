@@ -40,3 +40,7 @@ _Avoid_: header mode, metadata configuration
 The encrypted data key and accompanying material stored with an object, without which the object
 cannot be decrypted.
 _Avoid_: wrapper, header blob
+
+**Object location**:
+The place where an object exists — its bucket and the key prefix leading to it.
+_Avoid_: storage coordinates

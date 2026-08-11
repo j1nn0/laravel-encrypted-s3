@@ -9,9 +9,9 @@ use Aws\S3\Crypto\HeadersMetadataStrategy;
 use Aws\S3\Crypto\InstructionFileMetadataStrategy;
 use J1nn0\EncryptedS3\Support\EncryptedS3Arguments;
 use J1nn0\EncryptedS3\Support\EncryptionOptions;
+use J1nn0\EncryptedS3\Support\ObjectLocation;
 use League\Flysystem\AwsS3V3\VisibilityConverter;
 use League\Flysystem\Config;
-use League\Flysystem\PathPrefixer;
 use League\MimeTypeDetection\MimeTypeDetector;
 use PHPUnit\Framework\TestCase;
 
@@ -28,8 +28,7 @@ final class EncryptedS3ArgumentsTest extends TestCase
 
         $this->arguments = new EncryptedS3Arguments(
             $this->createMock(MaterialsProviderV3::class),
-            'bucket',
-            new PathPrefixer('root'),
+            new ObjectLocation('bucket', 'root'),
             $mimeTypeDetector,
             $this->createMock(VisibilityConverter::class),
             new EncryptionOptions(

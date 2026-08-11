@@ -9,7 +9,6 @@ use Aws\S3\Crypto\HeadersMetadataStrategy;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use League\Flysystem\AwsS3V3\VisibilityConverter;
 use League\Flysystem\Config;
-use League\Flysystem\PathPrefixer;
 use League\MimeTypeDetection\MimeTypeDetector;
 
 /**
@@ -24,8 +23,7 @@ final class EncryptedS3Arguments
      */
     public function __construct(
         private readonly MaterialsProviderV3 $materialsProvider,
-        private readonly string $bucket,
-        private readonly PathPrefixer $prefixer,
+        private readonly ObjectLocation $location,
         private readonly MimeTypeDetector $mimeTypeDetector,
         private readonly VisibilityConverter $visibility,
         private readonly EncryptionOptions $encryptionOptions,
@@ -110,8 +108,8 @@ final class EncryptedS3Arguments
     private function commonArguments(string $path): array
     {
         return [
-            'Bucket' => $this->bucket,
-            'Key' => $this->prefixer->prefixPath($path),
+            'Bucket' => $this->location->bucket(),
+            'Key' => $this->location->key($path),
             '@MaterialsProvider' => $this->materialsProvider,
             '@CommitmentPolicy' => $this->encryptionOptions->commitmentPolicy,
             '@KmsEncryptionContext' => $this->encryptionOptions->encryptionContext,

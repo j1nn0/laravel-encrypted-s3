@@ -42,11 +42,13 @@ Four layers, wired top-down by `EncryptedS3DiskFactory::make()`:
    `url`/`temporaryUrl`/`temporaryUploadUrl` throw `UnsupportedOperationException` and report
    `providesTemporary*Urls() === false`.
 
-`Support\EncryptedS3Arguments` (`@internal`) is the single place SDK request arguments are built:
+`Support\ObjectLocation` (`@internal`) owns the bucket and raw root in one place. The delegated
+adapter receives `bucket()` and `root()` from it, while `Support\EncryptedS3Arguments` uses its
+`key()` method, so encrypted and delegated paths derive from the same object location. Because the
+delegated adapter constructs its own `PathPrefixer`, `ObjectLocation` keeps a separate one for
+encrypted keys. `EncryptedS3Arguments` is the single place SDK request arguments are built:
 `forPut()` and `forGet()` share one private `commonArguments()`, so the six arguments both requests
-need — including the `@MetadataStrategy` pin — are written once. Because two clients touch the same
-bucket, this module holds its own `PathPrefixer` so encrypted calls apply the same `root` prefix the
-inner adapter does.
+need — including the `@MetadataStrategy` pin — are written once.
 
 `Support\EncryptionOptions` is the config value object; it validates in the constructor so an
 invalid commitment policy, security profile, or encryption context can never reach the SDK.

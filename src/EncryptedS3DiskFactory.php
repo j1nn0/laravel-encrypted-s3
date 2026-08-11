@@ -13,10 +13,10 @@ use J1nn0\EncryptedS3\Filesystem\EncryptedS3Filesystem;
 use J1nn0\EncryptedS3\Flysystem\EncryptedS3Adapter;
 use J1nn0\EncryptedS3\Support\EncryptedS3Arguments;
 use J1nn0\EncryptedS3\Support\EncryptionOptions;
+use J1nn0\EncryptedS3\Support\ObjectLocation;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use League\Flysystem\AwsS3V3\PortableVisibilityConverter;
 use League\Flysystem\Filesystem;
-use League\Flysystem\PathPrefixer;
 use League\MimeTypeDetection\FinfoMimeTypeDetector;
 
 final class EncryptedS3DiskFactory
@@ -50,11 +50,18 @@ final class EncryptedS3DiskFactory
         $visibility = new PortableVisibilityConverter;
         $mimeTypeDetector = new FinfoMimeTypeDetector;
         $root = is_string($config['root'] ?? '') ? $config['root'] : '';
+        $location = new ObjectLocation($bucket, $root);
         $s3Client = new S3Client($this->clientConfig($config, $region));
         $kmsClient = new KmsClient($this->kmsClientConfig($config, $kmsConfig, $region));
         $materialsProvider = new KmsMaterialsProviderV3($kmsClient, $kmsKeyId);
         $encryptionClient = new S3EncryptionClientV3($s3Client);
-        $inner = new AwsS3V3Adapter($s3Client, $bucket, $root, $visibility, $mimeTypeDetector);
+        $inner = new AwsS3V3Adapter(
+            $s3Client,
+            $location->bucket(),
+            $location->root(),
+            $visibility,
+            $mimeTypeDetector,
+        );
 
         if (! array_key_exists('ACL', $putOptions)) {
             $putOptions['ACL'] = $visibility->visibilityToAcl(
@@ -66,8 +73,7 @@ final class EncryptedS3DiskFactory
 
         $arguments = new EncryptedS3Arguments(
             $materialsProvider,
-            $bucket,
-            new PathPrefixer($root),
+            $location,
             $mimeTypeDetector,
             $visibility,
             $encryptionOptions,
