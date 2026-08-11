@@ -23,7 +23,7 @@ final class InMemoryAws
     public array $objects = [];
 
     /**
-     * @var list<array{method: string, path: string, headers: array<string, string>, body: string}>
+     * @var list<array{command: string, method: string, path: string, headers: array<string, string>, body: string}>
      */
     public array $s3Requests = [];
 
@@ -39,6 +39,8 @@ final class InMemoryAws
     private ?string $kmsErrorCode = null;
 
     private ?string $kmsErrorMessage = null;
+
+    private bool $aclDisabled = false;
 
     public function s3Handler(): callable
     {
@@ -60,6 +62,11 @@ final class InMemoryAws
         $this->kmsErrorMessage = $message;
     }
 
+    public function disableAcls(): void
+    {
+        $this->aclDisabled = true;
+    }
+
     /**
      * @param  array<string, string>  $headers
      */
@@ -75,7 +82,7 @@ final class InMemoryAws
     }
 
     /**
-     * @return array{method: string, path: string, headers: array<string, string>, body: string}|null
+     * @return array{command: string, method: string, path: string, headers: array<string, string>, body: string}|null
      */
     public function lastS3Request(string $method): ?array
     {
@@ -99,6 +106,7 @@ final class InMemoryAws
         $method = strtoupper($request->getMethod());
 
         $this->s3Requests[] = [
+            'command' => $command->getName(),
             'method' => $method,
             'path' => $path,
             'headers' => $requestHeaders,
@@ -114,7 +122,7 @@ final class InMemoryAws
             'CopyObject' => $this->copyObject($command, $request, $key, $requestHeaders),
             'ListObjects' => $this->listObjects($command),
             'ListObjectsV2' => $this->listObjects($command),
-            'PutObjectAcl' => new Result,
+            'PutObjectAcl' => $this->putObjectAcl($command),
             'GetObjectAcl' => new Result(['Grants' => $this->grants()]),
             default => throw new LogicException(
                 'InMemoryAws received an unhandled S3 command: '.$command->getName()
@@ -171,6 +179,19 @@ final class InMemoryAws
         ];
 
         return new Result(['ETag' => '"'.md5($body).'"']);
+    }
+
+    // @phpstan-ignore-next-line missingType.iterableValue
+    private function putObjectAcl(CommandInterface $command): Result
+    {
+        if ($this->aclDisabled) {
+            throw new S3Exception('ACLs are not supported.', $command, [
+                'code' => 'AccessControlListNotSupported',
+                'response' => new Response(400),
+            ]);
+        }
+
+        return new Result;
     }
 
     // @phpstan-ignore-next-line missingType.iterableValue

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace J1nn0\EncryptedS3\Tests\Feature;
 
 use Aws\Crypto\MetadataEnvelope;
+use Aws\S3\Exception\S3Exception;
 use Closure;
 use DateTimeImmutable;
 use Illuminate\Support\Facades\Storage;
@@ -14,6 +15,7 @@ use J1nn0\EncryptedS3\Filesystem\EncryptedS3Filesystem;
 use J1nn0\EncryptedS3\Support\EncryptionOptions;
 use J1nn0\EncryptedS3\Tests\TestCase;
 use League\Flysystem\UnableToReadFile;
+use League\Flysystem\UnableToSetVisibility;
 use League\Flysystem\UnableToWriteFile;
 use PHPUnit\Framework\Attributes\DataProvider;
 
@@ -534,6 +536,45 @@ final class EncryptedS3FilesystemTest extends TestCase
         $request = $this->aws->lastS3Request('PUT');
         self::assertIsArray($request);
         self::assertSame('public-read', $request['headers']['x-amz-acl'] ?? null);
+    }
+
+    public function test_visibility_reads_the_s3_acl(): void
+    {
+        /** @var EncryptedS3Filesystem $disk */
+        $disk = Storage::disk();
+
+        self::assertSame('private', $disk->visibility('visibility.txt'));
+
+        $request = $this->aws->lastS3Request('GET');
+        self::assertIsArray($request);
+        self::assertSame('GetObjectAcl', $request['command']);
+        self::assertSame('test-bucket/visibility.txt', $request['path']);
+    }
+
+    public function test_set_visibility_sends_the_matching_acl_for_public_and_private(): void
+    {
+        foreach (['public' => 'public-read', 'private' => 'private'] as $visibility => $acl) {
+            Storage::disk()->setVisibility("{$visibility}.txt", $visibility);
+
+            $request = $this->aws->lastS3Request('PUT');
+            self::assertIsArray($request);
+            self::assertSame('PutObjectAcl', $request['command']);
+            self::assertSame($acl, $request['headers']['x-amz-acl'] ?? null);
+        }
+    }
+
+    public function test_set_visibility_surfaces_acl_disabled_bucket_failure(): void
+    {
+        $this->aws->disableAcls();
+
+        try {
+            Storage::disk()->setVisibility('acl-disabled.txt', 'public');
+            self::fail('The ACL-disabled bucket failure was swallowed.');
+        } catch (UnableToSetVisibility $exception) {
+            $previous = $exception->getPrevious();
+            self::assertInstanceOf(S3Exception::class, $previous);
+            self::assertSame('AccessControlListNotSupported', $previous->getAwsErrorCode());
+        }
     }
 
     public function test_copy_and_move_preserve_the_envelope_and_remain_readable(): void
