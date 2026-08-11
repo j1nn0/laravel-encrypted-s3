@@ -6,6 +6,7 @@ namespace J1nn0\EncryptedS3\Tests\Unit;
 
 use J1nn0\EncryptedS3\Exceptions\InvalidConfigurationException;
 use J1nn0\EncryptedS3\Support\PutOptions;
+use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -63,6 +64,23 @@ final class PutOptionsTest extends TestCase
     public function test_is_incompatible_with_encryption_identifies_incompatible_options(string $key): void
     {
         self::assertTrue(PutOptions::isIncompatibleWithEncryption($key));
+    }
+
+    public function test_each_upstream_put_option_has_exactly_one_package_classification(): void
+    {
+        foreach (AwsS3V3Adapter::AVAILABLE_OPTIONS as $option) {
+            $classifications = [
+                'supported' => PutOptions::isSupportedByEncryption($option),
+                'reserved' => PutOptions::isReserved($option),
+                'incompatible' => PutOptions::isIncompatibleWithEncryption($option),
+            ];
+
+            self::assertSame(
+                1,
+                count(array_filter($classifications)),
+                "Put option {$option} must have exactly one package classification.",
+            );
+        }
     }
 
     public function test_validated_rejects_non_array_options(): void

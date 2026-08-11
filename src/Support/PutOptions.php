@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace J1nn0\EncryptedS3\Support;
 
 use J1nn0\EncryptedS3\Exceptions\InvalidConfigurationException;
-use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 
 /**
  * @internal
@@ -32,6 +31,27 @@ final class PutOptions
             'SSECustomerAlgorithm',
             'SSECustomerKey',
             'SSECustomerKeyMD5',
+        ], true);
+    }
+
+    public static function isSupportedByEncryption(string $key): bool
+    {
+        return in_array($key, [
+            'ACL',
+            'CacheControl',
+            'ContentDisposition',
+            'ContentEncoding',
+            'ContentType',
+            'Expires',
+            'GrantFullControl',
+            'GrantRead',
+            'GrantReadACP',
+            'GrantWriteACP',
+            'RequestPayer',
+            'StorageClass',
+            'Tagging',
+            'WebsiteRedirectLocation',
+            'ChecksumAlgorithm',
         ], true);
     }
 
@@ -84,7 +104,7 @@ final class PutOptions
                 continue;
             }
 
-            if (in_array($key, AwsS3V3Adapter::AVAILABLE_OPTIONS, true)) {
+            if (self::isSupportedByEncryption($key)) {
                 $filtered[$key] = $value;
             }
         }

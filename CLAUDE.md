@@ -83,10 +83,13 @@ These are the point of the package. Several are enforced in more than one place;
   incompatible with client-side encryption: `ContentLength` contradicts the ciphertext body,
   `MetadataDirective` and `CopySourceSSE*` are CopyObject-only, and SSE parameters are out of
   scope; SSE-C would make objects unreadable through this package. `PutOptions::isIncompatibleWithEncryption()`
-  is the single definition of that rule. Both rules are enforced at both points —
+  is the single definition of that rule. `PutOptions::isSupportedByEncryption()` owns the
+  request-time allowlist: `ACL`, `CacheControl`, `ContentDisposition`, `ContentEncoding`,
+  `ContentType`, `Expires`, `GrantFullControl`, `GrantRead`, `GrantReadACP`, `GrantWriteACP`,
+  `RequestPayer`, `StorageClass`, `Tagging`, `WebsiteRedirectLocation`, and `ChecksumAlgorithm`.
+  Both rules are enforced at both points —
   `PutOptions::validated()` rejects at config time, and `PutOptions::filtered()` strips again at
-  request time.
-  Surviving keys must be in `AwsS3V3Adapter::AVAILABLE_OPTIONS` (checked at request time only).
+  request time. `AwsS3V3Adapter::AVAILABLE_OPTIONS` is only a test tripwire for reclassification.
   Reserved encryption-context keys: `aws:x-amz-cek-alg`, `kms_cmk_id`.
 - **Failure messages constructed by the package are redacted.** `Support\SafeFailureReason::from()`
   deliberately reduces a throwable to its short class name plus an AWS error code. PHP stack-trace

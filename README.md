@@ -81,16 +81,20 @@ set, `visibility` wins. `options['ACL']` is the route for canned ACLs that
 Flysystem visibility cannot express, such as `bucket-owner-full-control`, which
 is accepted by ACL-disabled buckets. `throw` retains Laravel's normal
 filesystem exception behavior.
-`options` is filtered to Flysystem's supported S3 `PutObject` parameters before
-being merged into encrypted requests. `Metadata`, `Body`, `Bucket`, `Key`, and
-keys beginning with `@` are reserved and rejected or omitted. `ContentLength`,
+`options` is filtered to this package's CSE-compatible `PutObject` allowlist:
+`ACL`, `CacheControl`, `ContentDisposition`, `ContentEncoding`, `ContentType`,
+`Expires`, `GrantFullControl`, `GrantRead`, `GrantReadACP`, `GrantWriteACP`,
+`RequestPayer`, `StorageClass`, `Tagging`, `WebsiteRedirectLocation`, and
+`ChecksumAlgorithm`. `Metadata`, `Body`, `Bucket`, `Key`, and keys beginning
+with `@` are reserved and rejected or omitted. `ContentLength`,
 `MetadataDirective`, `CopySourceSSECustomerAlgorithm`,
 `CopySourceSSECustomerKey`, and `CopySourceSSECustomerKeyMD5` are rejected
 because the first contradicts the ciphertext body and the others are
 CopyObject-only. `ServerSideEncryption`, `SSEKMSKeyId`,
 `SSECustomerAlgorithm`, `SSECustomerKey`, and `SSECustomerKeyMD5` are rejected
 because server-side encryption is out of scope for CSE, and SSE-C would make
-objects unreadable through this package.
+objects unreadable through this package. The upstream Flysystem option constant
+is used only as a test tripwire, not as this allowlist.
 
 The encrypted read and write paths omit a default ACL, but delegated operations
 keep the upstream Flysystem S3 behavior. `visibility()` reads the object ACL
