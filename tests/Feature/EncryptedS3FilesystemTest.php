@@ -349,6 +349,20 @@ final class EncryptedS3FilesystemTest extends TestCase
         self::assertArrayNotHasKey('custom-option', $request['headers']);
     }
 
+    public function test_a_disk_without_a_visibility_key_still_sends_a_private_acl(): void
+    {
+        $config = $this->diskConfig();
+        unset($config['visibility']);
+        $this->app['config']->set('filesystems.disks.encrypted-s3', $config);
+        $this->app['filesystem']->forgetDisk('encrypted-s3');
+
+        Storage::disk()->put('no-visibility.txt', 'body');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('private', $request['headers']['x-amz-acl'] ?? null);
+    }
+
     public function test_copy_and_move_preserve_the_envelope_and_remain_readable(): void
     {
         Storage::disk()->put('source.txt', 'copyable plaintext');
