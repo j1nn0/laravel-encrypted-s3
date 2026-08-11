@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    name: PHP ${{ matrix.php }} / Laravel ${{ matrix.laravel }} / ${{ matrix.dependency-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.2', '8.3', '8.4', '8.5']
+        laravel: ['12', '13']
+        dependency-version: [normal, lowest]
+        include:
+          - laravel: '12'
+            illuminate: '^12.0'
+            testbench: '^10.0'
+          - laravel: '13'
+            illuminate: '^13.0'
+            testbench: '^11.0'
+        exclude:
+          - php: '8.2'
+            laravel: '13'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: openssl
+          coverage: none
+          tools: composer:v2
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-php-${{ matrix.php }}-laravel-${{ matrix.laravel }}-${{ matrix.dependency-version }}-composer-${{ hashFiles('**/composer.json') }}
+          restore-keys: |
+            ${{ runner.os }}-php-${{ matrix.php }}-laravel-${{ matrix.laravel }}-${{ matrix.dependency-version }}-composer-
+            ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: >-
+          composer update --prefer-dist --no-interaction --no-progress --with-all-dependencies
+          --with "illuminate/filesystem:${{ matrix.illuminate }}"
+          --with "illuminate/support:${{ matrix.illuminate }}"
+          --with "illuminate/contracts:${{ matrix.illuminate }}"
+          --with "orchestra/testbench:${{ matrix.testbench }}"
+          ${{ matrix.dependency-version == 'lowest' && '--prefer-lowest' || '' }}
+
+      - name: Run tests
+        run: composer test
+
+  quality:
+    name: Quality
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: openssl
+          coverage: none
+          tools: composer:v2
+
+      - name: Get Composer cache directory
+        id: composer-cache
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer downloads
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: ${{ runner.os }}-quality-composer-${{ hashFiles('**/composer.json') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Install dependencies
+        run: composer update --prefer-dist --no-interaction --no-progress --with-all-dependencies
+
+      - name: Run lint
+        run: composer lint
+
+      - name: Run static analysis
+        run: composer analyse
