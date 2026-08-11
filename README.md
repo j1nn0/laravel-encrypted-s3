@@ -68,19 +68,23 @@ This is a complete disk configuration example:
 ],
 ```
 
-Only the AWS SDK client settings shown above are forwarded — `endpoint`,
+These optional AWS SDK client settings are forwarded — `endpoint`,
 `use_path_style_endpoint`, `retries`, `http`, `http_handler`, `handler`, and
 `debug`. Anything else in the disk configuration is ignored rather than passed
 to the SDK. The common settings may be set under `kms` for the KMS client;
-`use_path_style_endpoint` is S3-only. Unlike the region and credentials, common
-settings are not inherited from the disk.
+`use_path_style_endpoint` is S3-only, and these common settings are never
+inherited from the disk. Region and credentials are the exception: the KMS
+client inherits both from the disk when they are not set under `kms`. A
+`credentials` array takes precedence over `key`, `secret`, and `token` at the
+same level.
 
 `root` is an S3 key prefix. Encrypted writes send no ACL unless the user asks
-for one through `visibility` or an explicit `ACL` PutObject option. If both are
-set, `visibility` wins. `options['ACL']` is the route for canned ACLs that
-Flysystem visibility cannot express, such as `bucket-owner-full-control`, which
-is accepted by ACL-disabled buckets. `throw` retains Laravel's normal
-filesystem exception behavior.
+for one through `visibility` or an explicit `ACL` PutObject option. Per-call
+Flysystem `Config` options override the disk-level `options` array. If both are
+set, `visibility` is applied afterwards and wins over an explicit `ACL`.
+`options['ACL']` is the route for canned ACLs that Flysystem visibility cannot
+express, such as `bucket-owner-full-control`, which is accepted by ACL-disabled
+buckets. `throw` retains Laravel's normal filesystem exception behavior.
 `options` is filtered to this package's CSE-compatible `PutObject` allowlist:
 `ACL`, `CacheControl`, `ContentDisposition`, `ContentEncoding`, `ContentType`,
 `Expires`, `GrantFullControl`, `GrantRead`, `GrantReadACP`, `GrantWriteACP`,
@@ -122,6 +126,14 @@ cannot be configured.
 the SDK to try decryption without fixing the KMS key ID to the configured key.
 This can make key ownership and object provenance less strict, so enable it
 only for a deliberate migration or compatibility case.
+
+`EncryptionOptions` exposes the configuration values as typo-safe constants:
+`COMMITMENT_POLICY_FORBID_ENCRYPT_ALLOW_DECRYPT`,
+`COMMITMENT_POLICY_REQUIRE_ENCRYPT_ALLOW_DECRYPT`,
+`COMMITMENT_POLICY_REQUIRE_ENCRYPT_REQUIRE_DECRYPT`, `SECURITY_PROFILE_V3`, and
+`SECURITY_PROFILE_V3_AND_LEGACY`. The first and last are retained for SDK
+compatibility but rejected during configuration; only the two
+`REQUIRE_ENCRYPT_*` policies and `V3` are accepted.
 
 ## Required IAM permissions
 
@@ -179,7 +191,7 @@ implementation is not streaming internally.
 | `temporaryUrl` | Not supported | Throws `UnsupportedOperationException`. |
 | `temporaryUploadUrl` | Not supported | Throws `UnsupportedOperationException`. |
 
-## Not supported in the MVP
+## Not supported
 
 - Large uploads through `S3EncryptionMultipartUploaderV3`
 - Instruction-file metadata strategy (intentionally disabled; only S3 object metadata is used)
@@ -235,6 +247,19 @@ implementation is not streaming internally.
 - Presigned GET and PUT URLs are disabled. A presigned GET would serve
   ciphertext without client-side decryption, and a presigned PUT could create
   a path for plaintext to reach S3 without CSE.
+
+## Versioning and support policy
+
+From 1.0.0 onward, this package follows Semantic Versioning. The public API is
+`EncryptedS3ServiceProvider`, `EncryptedS3DiskFactory`,
+`Filesystem\EncryptedS3Filesystem`, `Support\EncryptionOptions`,
+`Exceptions\InvalidConfigurationException`,
+`Exceptions\UnsupportedOperationException`, and the disk configuration array
+shape. Everything marked `@internal` — all `Support\*` classes except
+`EncryptionOptions`, plus `Flysystem\EncryptedS3Adapter` — is outside the
+compatibility promise and may change in any release. New Laravel and PHP
+versions are added in minor releases; support for old versions is dropped only
+in a major release.
 
 ## Development
 
