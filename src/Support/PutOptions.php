@@ -34,6 +34,16 @@ final class PutOptions
         ], true);
     }
 
+    public static function isGrantOption(string $key): bool
+    {
+        return in_array($key, [
+            'GrantFullControl',
+            'GrantRead',
+            'GrantReadACP',
+            'GrantWriteACP',
+        ], true);
+    }
+
     public static function isSupportedByEncryption(string $key): bool
     {
         return in_array($key, [
@@ -43,16 +53,40 @@ final class PutOptions
             'ContentEncoding',
             'ContentType',
             'Expires',
-            'GrantFullControl',
-            'GrantRead',
-            'GrantReadACP',
-            'GrantWriteACP',
             'RequestPayer',
             'StorageClass',
             'Tagging',
             'WebsiteRedirectLocation',
             'ChecksumAlgorithm',
-        ], true);
+        ], true) || self::isGrantOption($key);
+    }
+
+    /**
+     * @param  array<mixed, mixed>  $options
+     */
+    public static function assertAclAndGrantsAreNotCombined(array $options): void
+    {
+        if (! array_key_exists('ACL', $options)) {
+            return;
+        }
+
+        $grantOptions = [];
+
+        foreach (array_keys($options) as $key) {
+            if (is_string($key) && self::isGrantOption($key)) {
+                $grantOptions[] = $key;
+            }
+        }
+
+        if ($grantOptions === []) {
+            return;
+        }
+
+        throw new InvalidConfigurationException(
+            'The S3 put options cannot combine ACL with grant headers ('
+            .implode(', ', $grantOptions)
+            .'); choose either a canned ACL or explicit grant headers.',
+        );
     }
 
     /**
@@ -89,6 +123,8 @@ final class PutOptions
                 );
             }
         }
+
+        self::assertAclAndGrantsAreNotCombined($options);
 
         return $options;
     }

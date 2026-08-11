@@ -87,6 +87,12 @@ These are the point of the package. Several are enforced in more than one place;
   request-time allowlist: `ACL`, `CacheControl`, `ContentDisposition`, `ContentEncoding`,
   `ContentType`, `Expires`, `GrantFullControl`, `GrantRead`, `GrantReadACP`, `GrantWriteACP`,
   `RequestPayer`, `StorageClass`, `Tagging`, `WebsiteRedirectLocation`, and `ChecksumAlgorithm`.
+  `ACL` and any of `GrantFullControl`, `GrantRead`, `GrantReadACP`, or `GrantWriteACP` are mutually
+  exclusive. The PutObject reference is silent on this combination, but the SDK performs no
+  cross-parameter validation and reported S3 responses reject it with `InvalidRequest`; the package
+  rejects it early with an actionable message. Grant options remain supported when used without `ACL`.
+  `PutOptions::validated()` catches disk-option combinations, and `EncryptedS3Arguments::forPut()`
+  checks the final arguments again after visibility has been applied.
   `PutOptions::validated()` rejects reserved, incompatible, and unsupported disk options at config
   time. `PutOptions::filtered()` strips those keys again at request time and silently drops other
   unsupported keys because it receives the broader Flysystem runtime `Config`, including keys such
@@ -94,8 +100,11 @@ These are the point of the package. Several are enforced in more than one place;
   reclassification.
   Reserved encryption-context keys: `aws:x-amz-cek-alg`, `kms_cmk_id`.
 - **Failure messages constructed by the package are redacted.** `Support\SafeFailureReason::from()`
-  deliberately reduces a throwable to its short class name plus an AWS error code. PHP stack-trace
-  arguments are outside this boundary and can contain caller arguments such as plaintext.
+  deliberately reduces a throwable to its short class name plus an AWS error code. The write path
+  rethrows package-created `InvalidConfigurationException` messages unchanged so option conflicts
+  remain actionable; those fixed messages name only option keys and contain no plaintext, credentials,
+  or key material. PHP stack-trace arguments are outside this boundary and can contain caller
+  arguments such as plaintext; read and read-stream failures remain wrapped and redacted.
 
 ## Testing approach
 

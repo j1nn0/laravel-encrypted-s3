@@ -98,6 +98,11 @@ is used only as a test tripwire, not as this allowlist. Disk `options` outside
 this allowlist are rejected at configuration time to catch mistakes; per-call
 runtime `Config` is broader because it also carries Laravel/Flysystem keys such
 as `visibility` and `mimetype`, so unsupported keys are silently stripped there.
+`ACL` cannot be combined with `GrantFullControl`, `GrantRead`, `GrantReadACP`,
+or `GrantWriteACP`. The PutObject reference is silent on this combination, but
+the SDK does not validate it and reported S3 responses reject it with `InvalidRequest`, so
+both configuration validation and final request assembly reject it early.
+Grant options remain valid on their own.
 
 The encrypted read and write paths omit a default ACL, but delegated operations
 keep the upstream Flysystem S3 behavior. `visibility()` reads the object ACL

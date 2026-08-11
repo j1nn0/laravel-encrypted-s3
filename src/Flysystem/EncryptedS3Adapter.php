@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace J1nn0\EncryptedS3\Flysystem;
 
 use Aws\S3\Crypto\S3EncryptionClientV3;
+use J1nn0\EncryptedS3\Exceptions\InvalidConfigurationException;
 use J1nn0\EncryptedS3\Support\EncryptedS3Arguments;
 use J1nn0\EncryptedS3\Support\SafeFailureReason;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
@@ -143,6 +144,8 @@ final class EncryptedS3Adapter implements FilesystemAdapter
     {
         try {
             $this->encryptionClient->putObject($this->arguments->forPut($path, $contents, $config));
+        } catch (InvalidConfigurationException $exception) {
+            throw $exception;
         } catch (Throwable $exception) {
             throw UnableToWriteFile::atLocation($path, SafeFailureReason::from($exception), $exception);
         }

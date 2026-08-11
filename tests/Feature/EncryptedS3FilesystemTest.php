@@ -373,6 +373,23 @@ final class EncryptedS3FilesystemTest extends TestCase
         Storage::disk();
     }
 
+    public function test_a_disk_with_acl_and_grant_options_is_rejected_at_construction(): void
+    {
+        $this->configureDisk([
+            'options' => [
+                'ACL' => 'private',
+                'GrantRead' => 'id="owner"',
+            ],
+        ]);
+
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage(
+            'The S3 put options cannot combine ACL with grant headers (GrantRead);',
+        );
+
+        Storage::disk();
+    }
+
     public function test_a_disk_without_a_visibility_key_sends_no_acl(): void
     {
         $config = $this->diskConfig();
@@ -434,6 +451,60 @@ final class EncryptedS3FilesystemTest extends TestCase
         $request = $this->aws->lastS3Request('PUT');
         self::assertIsArray($request);
         self::assertSame('public-read', $request['headers']['x-amz-acl'] ?? null);
+    }
+
+    public function test_disk_visibility_and_grant_options_are_rejected_at_write_time(): void
+    {
+        $this->configureDisk([
+            'options' => ['GrantRead' => 'id="owner"'],
+            'visibility' => 'private',
+        ]);
+
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage(
+            'The S3 put options cannot combine ACL with grant headers (GrantRead);',
+        );
+
+        Storage::disk()->put('disk-visibility-grant.txt', 'body');
+    }
+
+    public function test_per_call_visibility_and_disk_grant_options_are_rejected_at_write_time(): void
+    {
+        $this->configureDisk([
+            'options' => ['GrantRead' => 'id="owner"'],
+        ]);
+
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage(
+            'The S3 put options cannot combine ACL with grant headers (GrantRead);',
+        );
+
+        Storage::disk()->put('per-call-visibility-grant.txt', 'body', ['visibility' => 'private']);
+    }
+
+    public function test_grant_options_alone_are_sent_as_s3_grant_headers(): void
+    {
+        $grantHeaders = [
+            'x-amz-grant-full-control' => 'id="owner"',
+            'x-amz-grant-read' => 'id="reader"',
+            'x-amz-grant-read-acp' => 'id="reader-acp"',
+            'x-amz-grant-write-acp' => 'id="writer-acp"',
+        ];
+        $this->configureDisk(['options' => [
+            'GrantFullControl' => $grantHeaders['x-amz-grant-full-control'],
+            'GrantRead' => $grantHeaders['x-amz-grant-read'],
+            'GrantReadACP' => $grantHeaders['x-amz-grant-read-acp'],
+            'GrantWriteACP' => $grantHeaders['x-amz-grant-write-acp'],
+        ]]);
+
+        Storage::disk()->put('grant-only.txt', 'body');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+
+        foreach ($grantHeaders as $header => $value) {
+            self::assertSame($value, $request['headers'][$header] ?? null);
+        }
     }
 
     public function test_a_per_call_visibility_option_sends_the_matching_acl(): void

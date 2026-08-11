@@ -56,7 +56,7 @@ final class EncryptedS3Arguments
             }
         }
 
-        return array_merge(
+        $arguments = array_merge(
             $options,
             $this->commonArguments($path),
             [
@@ -64,6 +64,10 @@ final class EncryptedS3Arguments
                 '@CipherOptions' => ['Cipher' => 'gcm'],
             ],
         );
+
+        PutOptions::assertAclAndGrantsAreNotCombined($arguments);
+
+        return $arguments;
     }
 
     /**
