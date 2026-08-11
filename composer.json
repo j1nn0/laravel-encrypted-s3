@@ -39,6 +39,7 @@
     },
     "scripts": {
         "test": "vendor/bin/phpunit",
+        "test:integration": "vendor/bin/phpunit --testsuite=Integration",
         "lint": "vendor/bin/pint --test",
         "analyse": "vendor/bin/phpstan analyse --memory-limit=512M"
     },

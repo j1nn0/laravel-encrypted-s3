@@ -3,11 +3,16 @@
          xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
          bootstrap="vendor/autoload.php"
          colors="true"
+         defaultTestSuite="Unit + Feature"
          failOnRisky="true"
          failOnWarning="true">
     <testsuites>
-        <testsuite name="Encrypted S3">
-            <directory>tests</directory>
+        <testsuite name="Unit + Feature">
+            <directory>tests/Unit</directory>
+            <directory>tests/Feature</directory>
+        </testsuite>
+        <testsuite name="Integration">
+            <directory>tests/Integration</directory>
         </testsuite>
     </testsuites>
 </phpunit>

@@ -12,7 +12,8 @@ implements ciphers itself.
 ## Commands
 
 ```sh
-composer test                                   # PHPUnit 11, 12, or 13, whole suite
+composer test                                   # PHPUnit 11, 12, or 13, Unit + Feature suite
+composer test:integration                       # Moto HTTP suite (requires Compose)
 vendor/bin/phpunit --filter test_put_and_get_round_trip_plaintext   # single test
 vendor/bin/phpunit tests/Feature/EncryptedS3FilesystemTest.php      # single file
 composer lint                                   # Pint (laravel preset) in --test mode
@@ -121,6 +122,13 @@ Use `TestCase::configureDisk([...])` to override disk config within a test; it d
 default config and forgets the cached disk. Security behaviors are tested by staging a hostile
 object with `InMemoryAws::putRaw()` (tampered ciphertext, V2 envelope, instruction file, no
 envelope) and asserting the read fails closed.
+
+`tests/Integration/` is the slower HTTP layer: `compose.yaml` runs the pinned Moto Server image as
+local S3 + KMS, and the tests create their own bucket and symmetric KMS key through the AWS SDK.
+Start it with `docker compose up -d --wait`, run `composer test:integration`, then stop it with
+`docker compose down -v`. Moto is a mock; passing this suite does not prove compatibility with real
+AWS S3/KMS, which remains authoritative. The default `composer test` suite stays Unit + Feature so
+it does not require Moto.
 
 When adding a supported operation, also add its row to the support matrix in `README.md` — the table
 documents which operations are constrained by encryption and why.

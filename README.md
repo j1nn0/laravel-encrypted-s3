@@ -238,7 +238,7 @@ implementation is not streaming internally.
 
 ## Development
 
-Run the complete test suite, style check, and static analysis with:
+Run the default Unit + Feature suite, style check, and static analysis with:
 
 ```sh
 composer test
@@ -248,6 +248,20 @@ composer analyse
 
 `composer lint` runs Laravel Pint in test mode. `composer analyse` runs
 PHPStan at level 6 against `src` and `tests`.
+
+The HTTP integration layer uses the pinned `motoserver/moto:5.2.2` container
+as local S3 + KMS. Start it, run the explicit integration suite, and stop it
+with:
+
+```sh
+docker compose up -d --wait
+composer test:integration
+docker compose down -v
+```
+
+The fast Unit + Feature suite uses the unchanged `InMemoryAws` backend and
+does not need Moto. Moto is a mock, so these integration results do not prove
+compatibility with real AWS S3/KMS; real AWS remains authoritative.
 
 ## License
 
