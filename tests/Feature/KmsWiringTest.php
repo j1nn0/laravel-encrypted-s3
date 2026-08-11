@@ -244,7 +244,12 @@ final class KmsWiringTest extends TestCase
         // Assert messages only; PHP stack-trace arguments are outside package control.
         foreach ($sensitiveValues as $sensitiveValue) {
             self::assertStringContainsString($sensitiveValue, $lastMessage);
-            self::assertStringNotContainsString($sensitiveValue, $messages[0]);
+        }
+
+        foreach (array_slice($messages, 0, -1) as $message) {
+            foreach ($sensitiveValues as $sensitiveValue) {
+                self::assertStringNotContainsString($sensitiveValue, $message);
+            }
         }
     }
 }
