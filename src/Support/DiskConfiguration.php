@@ -20,7 +20,6 @@ final class DiskConfiguration
         private readonly string $bucket,
         private readonly string $region,
         private readonly string $root,
-        private readonly string $visibility,
         private readonly string $kmsKeyId,
         private readonly EncryptionOptions $encryptionOptions,
         private readonly array $putOptions,
@@ -55,13 +54,11 @@ final class DiskConfiguration
         $encryptionOptions = EncryptionOptions::fromConfig($encryptionConfig);
         $putOptions = PutOptions::validated($config['options'] ?? []);
         $root = is_string($config['root'] ?? null) ? $config['root'] : '';
-        $visibility = $config['visibility'] ?? null;
 
         return new self(
             $bucket,
             $region,
             $root,
-            is_string($visibility) && $visibility !== '' ? $visibility : 'private',
             $kmsKeyId,
             $encryptionOptions,
             $putOptions,
@@ -83,11 +80,6 @@ final class DiskConfiguration
     public function root(): string
     {
         return $this->root;
-    }
-
-    public function visibility(): string
-    {
-        return $this->visibility;
     }
 
     public function kmsKeyId(): string

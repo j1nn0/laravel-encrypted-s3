@@ -47,7 +47,8 @@ This is a complete disk configuration example:
     'retries' => ['mode' => 'standard', 'max_attempts' => 3], // Optional.
     'http' => ['timeout' => 10],                              // Optional Guzzle settings.
     'root' => '',
-    'visibility' => 'private',
+    // Optional: sends a canned S3 ACL. Omit this for ACL-disabled buckets.
+    // 'visibility' => 'private',
     'throw' => false,
     'options' => [],          // Additional PutObject parameters.
 
@@ -74,11 +75,21 @@ to the SDK. The common settings may be set under `kms` for the KMS client;
 `use_path_style_endpoint` is S3-only. Unlike the region and credentials, common
 settings are not inherited from the disk.
 
-`root` is an S3 key prefix. `visibility` controls the S3 ACL, and `throw`
-retains Laravel's normal filesystem exception behavior. `options` is filtered
-to Flysystem's supported S3 `PutObject` parameters before being merged into
-encrypted requests. `Metadata`, `Body`, `Bucket`, `Key`, and keys beginning
-with `@` are reserved and rejected or omitted.
+`root` is an S3 key prefix. `visibility` is optional and controls the S3 ACL
+for encrypted writes; when it is omitted, encrypted writes send no ACL. This
+works with buckets using S3 Object Ownership = `Bucket owner enforced`. Set
+`visibility` on the disk or on an individual write to send the matching canned
+ACL. `throw` retains Laravel's normal filesystem exception behavior.
+`options` is filtered to Flysystem's supported S3 `PutObject` parameters before
+being merged into encrypted requests. `Metadata`, `Body`, `Bucket`, `Key`, and
+keys beginning with `@` are reserved and rejected or omitted.
+
+The encrypted read and write paths omit a default ACL, but delegated operations
+keep the upstream Flysystem S3 behavior. `visibility()` reads the object ACL
+and works on ACL-disabled buckets because AWS returns the owner's full-control
+grant. `createDirectory()`, `copy()`, `move()` (which copies), and
+`setVisibility()` send ACL requests and fail with
+`AccessControlListNotSupported` when ACLs are disabled on the bucket.
 
 `kms.key_id` is required; there is no unencrypted fallback. The KMS region
 defaults to the disk region, and KMS credentials default to the disk
@@ -128,20 +139,22 @@ implementation is not streaming internally.
 
 | Operation | Support | Meaning and constraints |
 | --- | --- | --- |
-| `put` / `write` | Supported with constraints | Stored encrypted with CSE. The SDK holds the complete plaintext in memory; watch `memory_limit` for large objects. |
+| `put` / `write` | Supported with constraints | Stored encrypted with CSE. No ACL is sent unless `visibility` is explicitly configured. The SDK holds the complete plaintext in memory; watch `memory_limit` for large objects. |
 | `get` / `read` | Supported with constraints | Returns decrypted plaintext. The complete ciphertext is held in memory. |
 | `writeStream` | Supported with constraints | Works, but is not memory-efficient because the SDK CSE implementation is non-streaming. |
 | `readStream` | Supported with constraints | The returned resource is backed by decrypted plaintext held in memory. |
 | `exists` / `fileExists` / `directoryExists` | Fully supported | Unrelated to encryption. |
-| `delete` / `deleteDirectory` / `makeDirectory` | Fully supported | Unrelated to encryption. |
-| `copy` | Supported with constraints | S3 server-side copy preserves the encryption envelope, so the copy remains readable. It is not re-encrypted; the original KMS encryption context is retained. |
-| `move` | Supported with constraints | Copy followed by delete, with the same constraints as `copy`. |
+| `delete` / `deleteDirectory` | Fully supported | Unrelated to encryption. |
+| `makeDirectory` / `createDirectory` | Supported with constraints | Delegated to Flysystem's S3 adapter, which sends an ACL and fails with `AccessControlListNotSupported` when bucket ACLs are disabled. |
+| `copy` | Supported with constraints | S3 server-side copy preserves the encryption envelope, so the copy remains readable. It is not re-encrypted; the original KMS encryption context is retained. The delegated adapter sends an ACL and fails when bucket ACLs are disabled. |
+| `move` | Supported with constraints | Copy followed by delete, with the same ACL constraint as `copy`. |
 | `size` | Supported with constraints | Returns ciphertext size, including the 16-byte GCM tag, not plaintext size. |
 | `mimeType` | Supported with constraints | Returns the plaintext MIME type detected or supplied at write time. The MIME type is exposed as unencrypted S3 metadata. |
 | `lastModified` | Fully supported | Unrelated to encryption. |
 | `checksum` | Supported with constraints | Hashes plaintext. It downloads and decrypts the object and therefore incurs KMS and memory costs. |
 | `files` / `directories` / `allFiles` / `listContents` | Fully supported | Object key names are not encrypted. |
-| `visibility` / `setVisibility` | Fully supported | Uses S3 ACLs and is unrelated to encryption. |
+| `visibility` | Fully supported | Reads the S3 ACL with `GetObjectAcl`; AWS returns the owner's full-control grant even when bucket ACLs are disabled. |
+| `setVisibility` | Supported with constraints | Delegated to Flysystem's S3 adapter, which sends an ACL and fails with `AccessControlListNotSupported` when bucket ACLs are disabled. |
 | `url` | Not supported | Throws `UnsupportedOperationException`. |
 | `temporaryUrl` | Not supported | Throws `UnsupportedOperationException`. |
 | `temporaryUploadUrl` | Not supported | Throws `UnsupportedOperationException`. |

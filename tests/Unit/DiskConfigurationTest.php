@@ -116,16 +116,6 @@ final class DiskConfigurationTest extends TestCase
         self::assertSame('', DiskConfiguration::fromArray(self::configWith(['root' => 123]))->root());
     }
 
-    public function test_from_array_defaults_missing_or_invalid_visibility_to_private(): void
-    {
-        $config = self::validConfig();
-        unset($config['visibility']);
-
-        self::assertSame('private', DiskConfiguration::fromArray($config)->visibility());
-        self::assertSame('private', DiskConfiguration::fromArray(self::configWith(['visibility' => '']))->visibility());
-        self::assertSame('private', DiskConfiguration::fromArray(self::configWith(['visibility' => 123]))->visibility());
-    }
-
     public function test_from_array_exposes_the_validated_configuration(): void
     {
         $config = self::validConfig();
@@ -134,7 +124,6 @@ final class DiskConfigurationTest extends TestCase
         self::assertSame('bucket', $configuration->bucket());
         self::assertSame('region', $configuration->region());
         self::assertSame('root', $configuration->root());
-        self::assertSame('public', $configuration->visibility());
         self::assertSame('kms-key-id', $configuration->kmsKeyId());
         self::assertSame(
             EncryptionOptions::COMMITMENT_POLICY_REQUIRE_ENCRYPT_REQUIRE_DECRYPT,

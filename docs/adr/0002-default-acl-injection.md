@@ -1,3 +1,10 @@
 # ADR 0002: Default ACL injection in the disk factory
 
-`EncryptedS3DiskFactory::make()` injects an `ACL` into the default put options when the caller has not set one, derived from the disk configuration's visibility, and `Support\EncryptedS3Arguments::forPut()` derives `ACL` again from the Flysystem `Config`. This looks redundant — the `Config` carries the whole disk config (the factory passes it to `new Filesystem($adapter, $diskConfiguration->raw())`), so a disk that sets `visibility` produces the same ACL twice from the same value — but the two are not interchangeable: `forPut()` only overwrites when the configured visibility is a non-empty string, so a disk config without a `visibility` key, which is the Laravel default for an `s3` disk, has no other source of an ACL and would send `PutObject` without one. Keep the injection; only the `forPut()` derivation is per-call.
+Status: Superseded by [ADR 0004: Omit default ACLs on encrypted writes](0004-omit-default-acl-on-encrypted-writes.md).
+
+The original decision was for `EncryptedS3DiskFactory::make()` to inject an
+`ACL` into the default put options when the caller had not set one, derived
+from the disk configuration's visibility. `Support\EncryptedS3Arguments::forPut()`
+also derived `ACL` from the Flysystem `Config` for explicit disk or per-call
+visibility. ADR 0004 reverses the factory injection so encrypted writes do not
+send an ACL unless visibility is explicitly configured.

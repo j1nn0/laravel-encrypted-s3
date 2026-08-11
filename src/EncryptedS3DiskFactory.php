@@ -45,10 +45,6 @@ final class EncryptedS3DiskFactory
 
         $putOptions = $diskConfiguration->putOptions();
 
-        if (! array_key_exists('ACL', $putOptions)) {
-            $putOptions['ACL'] = $visibility->visibilityToAcl($diskConfiguration->visibility());
-        }
-
         $arguments = new EncryptedS3Arguments(
             $materialsProvider,
             $location,

@@ -33,8 +33,10 @@ Four layers, wired top-down by `EncryptedS3DiskFactory::make()`:
    while `Support\AwsClientSettings` derives the `S3Client` + `KmsClient` settings (KMS region and
    credentials fall back to the disk's). The factory assembles the stack and passes the raw disk
    config through to Laravel/Flysystem. Config errors throw `InvalidConfigurationException` at
-   disk-construction time, not on first I/O. The factory's default `ACL` injection looks redundant
-   with `EncryptedS3Arguments::forPut()` but is not — `docs/adr/0002-default-acl-injection.md`.
+   disk-construction time, not on first I/O. The factory does not inject a default `ACL`; explicit
+   disk or per-call visibility is handled by `EncryptedS3Arguments::forPut()` —
+   `docs/adr/0004-omit-default-acl-on-encrypted-writes.md` supersedes
+   `docs/adr/0002-default-acl-injection.md`.
 3. `Flysystem\EncryptedS3Adapter` — the split point. `read`/`readStream`/`write`/`writeStream` go
    through `S3EncryptionClientV3`; **everything else delegates to a wrapped `AwsS3V3Adapter`**
    (`$this->inner`). That is why `fileSize()` reports ciphertext size and `mimeType()` reports

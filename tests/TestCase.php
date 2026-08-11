@@ -44,7 +44,6 @@ abstract class TestCase extends OrchestraTestCase
             'endpoint' => 'http://s3.test',
             'use_path_style_endpoint' => true,
             'root' => '',
-            'visibility' => 'private',
             'throw' => true,
             'options' => [],
             'handler' => $this->aws->s3Handler(),

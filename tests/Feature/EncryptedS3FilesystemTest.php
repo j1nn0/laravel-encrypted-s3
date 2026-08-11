@@ -349,7 +349,7 @@ final class EncryptedS3FilesystemTest extends TestCase
         self::assertArrayNotHasKey('custom-option', $request['headers']);
     }
 
-    public function test_a_disk_without_a_visibility_key_still_sends_a_private_acl(): void
+    public function test_a_disk_without_a_visibility_key_sends_no_acl(): void
     {
         $config = $this->diskConfig();
         unset($config['visibility']);
@@ -360,7 +360,38 @@ final class EncryptedS3FilesystemTest extends TestCase
 
         $request = $this->aws->lastS3Request('PUT');
         self::assertIsArray($request);
+        self::assertArrayNotHasKey('x-amz-acl', $request['headers']);
+    }
+
+    public function test_a_disk_with_private_visibility_sends_a_private_acl(): void
+    {
+        $this->configureDisk(['visibility' => 'private']);
+
+        Storage::disk()->put('private-visibility.txt', 'body');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
         self::assertSame('private', $request['headers']['x-amz-acl'] ?? null);
+    }
+
+    public function test_a_disk_with_public_visibility_sends_a_public_acl(): void
+    {
+        $this->configureDisk(['visibility' => 'public']);
+
+        Storage::disk()->put('public-visibility.txt', 'body');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('public-read', $request['headers']['x-amz-acl'] ?? null);
+    }
+
+    public function test_a_per_call_visibility_option_sends_the_matching_acl(): void
+    {
+        Storage::disk()->put('per-call-visibility.txt', 'body', ['visibility' => 'public']);
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('public-read', $request['headers']['x-amz-acl'] ?? null);
     }
 
     public function test_copy_and_move_preserve_the_envelope_and_remain_readable(): void
