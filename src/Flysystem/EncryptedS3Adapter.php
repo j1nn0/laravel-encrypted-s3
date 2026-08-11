@@ -142,10 +142,18 @@ final class EncryptedS3Adapter implements FilesystemAdapter
      */
     private function put(string $path, $contents, Config $config): void
     {
+        // Argument assembly is the only phase allowed to surface an unredacted
+        // message, and only for this package's own configuration exception.
         try {
-            $this->encryptionClient->putObject($this->arguments->forPut($path, $contents, $config));
+            $arguments = $this->arguments->forPut($path, $contents, $config);
         } catch (InvalidConfigurationException $exception) {
             throw $exception;
+        } catch (Throwable $exception) {
+            throw UnableToWriteFile::atLocation($path, SafeFailureReason::from($exception), $exception);
+        }
+
+        try {
+            $this->encryptionClient->putObject($arguments);
         } catch (Throwable $exception) {
             throw UnableToWriteFile::atLocation($path, SafeFailureReason::from($exception), $exception);
         }

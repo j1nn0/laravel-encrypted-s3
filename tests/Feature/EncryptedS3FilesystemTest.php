@@ -14,6 +14,7 @@ use J1nn0\EncryptedS3\Filesystem\EncryptedS3Filesystem;
 use J1nn0\EncryptedS3\Support\EncryptionOptions;
 use J1nn0\EncryptedS3\Tests\TestCase;
 use League\Flysystem\UnableToReadFile;
+use League\Flysystem\UnableToWriteFile;
 use PHPUnit\Framework\Attributes\DataProvider;
 
 final class EncryptedS3FilesystemTest extends TestCase
@@ -58,6 +59,25 @@ final class EncryptedS3FilesystemTest extends TestCase
             self::assertStringNotContainsString($plain, $exception->getMessage());
             self::assertStringNotContainsString('kms-key-id', $exception->getMessage());
             self::assertStringContainsString('CryptoException', $exception->getMessage());
+        }
+    }
+
+    public function test_an_sdk_side_configuration_exception_is_still_redacted(): void
+    {
+        // The unredacted rethrow is scoped to argument assembly. A caller-supplied
+        // handler is SDK-side, so even this exception type must be redacted there.
+        $this->configureDisk([
+            'handler' => static function (): never {
+                throw new InvalidConfigurationException('upstream plaintext SECRET');
+            },
+        ]);
+
+        try {
+            Storage::disk()->put('sdk-failure.txt', 'body');
+            self::fail('The SDK-side failure was not propagated.');
+        } catch (UnableToWriteFile $exception) {
+            self::assertStringNotContainsString('SECRET', $exception->getMessage());
+            self::assertSame('InvalidConfigurationException', $exception->reason());
         }
     }
 

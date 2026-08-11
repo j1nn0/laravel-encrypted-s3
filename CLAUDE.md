@@ -100,10 +100,13 @@ These are the point of the package. Several are enforced in more than one place;
   reclassification.
   Reserved encryption-context keys: `aws:x-amz-cek-alg`, `kms_cmk_id`.
 - **Failure messages constructed by the package are redacted.** `Support\SafeFailureReason::from()`
-  deliberately reduces a throwable to its short class name plus an AWS error code. The write path
-  rethrows package-created `InvalidConfigurationException` messages unchanged so option conflicts
-  remain actionable; those fixed messages name only option keys and contain no plaintext, credentials,
-  or key material. PHP stack-trace arguments are outside this boundary and can contain caller
+  deliberately reduces a throwable to its short class name plus an AWS error code. `put()` splits
+  its two phases into separate `try` blocks precisely so the one carve-out stays narrow: only an
+  `InvalidConfigurationException` raised while *assembling* the request arguments is rethrown
+  unchanged, keeping option conflicts actionable, and those fixed messages name only option keys.
+  Everything the SDK call raises is redacted regardless of its type — the disk config accepts a
+  caller-supplied `handler`/`http_handler`, so a type-only carve-out would let an SDK-side throwable
+  bypass redaction. PHP stack-trace arguments are outside this boundary and can contain caller
   arguments such as plaintext; read and read-stream failures remain wrapped and redacted.
 
 ## Testing approach
