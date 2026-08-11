@@ -101,6 +101,8 @@ final class AwsClientSettingsTest extends TestCase
             'handler' => $handler,
             'debug' => true,
             'use_path_style_endpoint' => 1,
+            'retries' => ['mode' => 'standard', 'max_attempts' => 5],
+            'http' => ['timeout' => 10, 'proxy' => 'http://proxy.test'],
         ])->forS3();
 
         self::assertSame('http://s3.test', $settings['endpoint']);
@@ -108,6 +110,17 @@ final class AwsClientSettingsTest extends TestCase
         self::assertSame($handler, $settings['handler']);
         self::assertTrue($settings['debug']);
         self::assertTrue($settings['use_path_style_endpoint']);
+        self::assertSame(['mode' => 'standard', 'max_attempts' => 5], $settings['retries']);
+        self::assertSame(['timeout' => 10, 'proxy' => 'http://proxy.test'], $settings['http']);
+    }
+
+    public function test_optional_settings_are_absent_when_the_disk_does_not_set_them(): void
+    {
+        $settings = $this->settings([])->forS3();
+
+        foreach (['endpoint', 'http_handler', 'handler', 'debug', 'retries', 'http', 'use_path_style_endpoint'] as $key) {
+            self::assertArrayNotHasKey($key, $settings);
+        }
     }
 
     public function test_for_kms_passes_optional_settings_and_casts_path_style_to_bool(): void
@@ -121,6 +134,8 @@ final class AwsClientSettingsTest extends TestCase
                 'handler' => $handler,
                 'debug' => true,
                 'use_path_style_endpoint' => 0,
+                'retries' => 2,
+                'http' => ['timeout' => 3],
             ],
         ])->forKms();
 
@@ -129,6 +144,21 @@ final class AwsClientSettingsTest extends TestCase
         self::assertSame($handler, $settings['handler']);
         self::assertTrue($settings['debug']);
         self::assertFalse($settings['use_path_style_endpoint']);
+        self::assertSame(2, $settings['retries']);
+        self::assertSame(['timeout' => 3], $settings['http']);
+    }
+
+    public function test_kms_optional_settings_are_not_inherited_from_the_disk(): void
+    {
+        $settings = $this->settings([
+            'retries' => 9,
+            'http' => ['timeout' => 99],
+            'endpoint' => 'http://s3.test',
+        ])->forKms();
+
+        self::assertArrayNotHasKey('retries', $settings);
+        self::assertArrayNotHasKey('http', $settings);
+        self::assertArrayNotHasKey('endpoint', $settings);
     }
 
     /**

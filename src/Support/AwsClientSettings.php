@@ -102,7 +102,7 @@ final class AwsClientSettings
      */
     private function addOptionalClientSettings(array &$clientConfig, array $config): void
     {
-        foreach (['endpoint', 'http_handler', 'handler', 'debug'] as $key) {
+        foreach (['endpoint', 'http_handler', 'handler', 'debug', 'retries', 'http'] as $key) {
             if (array_key_exists($key, $config)) {
                 $clientConfig[$key] = $config[$key];
             }
