@@ -1,8 +1,30 @@
 {
     "name": "j1nn0/laravel-encrypted-s3",
     "description": "Laravel filesystem adapter for AWS S3 Client-Side Encryption V3.",
+    "keywords": [
+        "laravel",
+        "filesystem",
+        "s3",
+        "aws",
+        "kms",
+        "encryption",
+        "client-side-encryption",
+        "cse",
+        "flysystem"
+    ],
+    "homepage": "https://github.com/j1nn0/laravel-encrypted-s3",
     "type": "library",
     "license": "MIT",
+    "authors": [
+        {
+            "name": "j1nn0",
+            "homepage": "https://github.com/j1nn0"
+        }
+    ],
+    "support": {
+        "issues": "https://github.com/j1nn0/laravel-encrypted-s3/issues",
+        "source": "https://github.com/j1nn0/laravel-encrypted-s3"
+    },
     "require": {
         "php": "^8.2",
         "ext-openssl": "*",
@@ -42,6 +64,9 @@
         "test:integration": "vendor/bin/phpunit --testsuite=Integration",
         "lint": "vendor/bin/pint --test",
         "analyse": "vendor/bin/phpstan analyse --memory-limit=512M"
+    },
+    "config": {
+        "sort-packages": true
     },
     "minimum-stability": "stable",
     "prefer-stable": true
