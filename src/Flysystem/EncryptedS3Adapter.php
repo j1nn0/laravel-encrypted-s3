@@ -18,6 +18,9 @@ use Psr\Http\Message\StreamInterface;
 use RuntimeException;
 use Throwable;
 
+/**
+ * @internal
+ */
 final class EncryptedS3Adapter implements FilesystemAdapter
 {
     public function __construct(
