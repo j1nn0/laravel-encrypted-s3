@@ -38,6 +38,8 @@ final class InMemoryAws
 
     private ?string $kmsErrorCode = null;
 
+    private ?string $kmsErrorMessage = null;
+
     public function s3Handler(): callable
     {
         return function (CommandInterface $command, RequestInterface $request) {
@@ -52,9 +54,10 @@ final class InMemoryAws
         };
     }
 
-    public function failKmsWith(string $errorCode): void
+    public function failKmsWith(string $errorCode, string $message = 'KMS request failed.'): void
     {
         $this->kmsErrorCode = $errorCode;
+        $this->kmsErrorMessage = $message;
     }
 
     /**
@@ -132,10 +135,12 @@ final class InMemoryAws
         ];
 
         $errorCode = $this->kmsErrorCode;
+        $errorMessage = $this->kmsErrorMessage ?? 'KMS request failed.';
         $this->kmsErrorCode = null;
+        $this->kmsErrorMessage = null;
 
         if ($errorCode !== null) {
-            throw new KmsException('KMS request failed.', $command, [
+            throw new KmsException($errorMessage, $command, [
                 'code' => $errorCode,
                 'response' => new Response(400),
             ]);

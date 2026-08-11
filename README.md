@@ -212,8 +212,13 @@ implementation is not streaming internally.
   objects with the previous context unreadable.
 - Do not enable AWS SDK `debug` logging in production. HTTP dumps can contain
   encryption-envelope metadata.
-- Never put plaintext, AWS credentials, KMS key material, or envelope values
-  in logs or exception messages.
+- Failure messages constructed by this package are redacted; PHP stack-trace
+  arguments are outside this boundary and can contain caller arguments such as
+  plaintext.
+- If your threat model includes plaintext in logs, set
+  `zend.exception_ignore_args=On` in `php.ini`. This removes arguments from
+  every PHP stack trace and trades away argument context application-wide; it is
+  a generic Laravel/PHP write-path concern, not specific to this package.
 - Presigned GET and PUT URLs are disabled. A presigned GET would serve
   ciphertext without client-side decryption, and a presigned PUT could create
   a path for plaintext to reach S3 without CSE.

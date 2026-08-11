@@ -88,9 +88,9 @@ These are the point of the package. Several are enforced in more than one place;
   request time.
   Surviving keys must be in `AwsS3V3Adapter::AVAILABLE_OPTIONS` (checked at request time only).
   Reserved encryption-context keys: `aws:x-amz-cek-alg`, `kms_cmk_id`.
-- **Never let plaintext, credentials, KMS key material, or envelope values reach an exception
-  message or log.** `Support\SafeFailureReason::from()` deliberately reduces a throwable to its
-  short class name plus an AWS error code.
+- **Failure messages constructed by the package are redacted.** `Support\SafeFailureReason::from()`
+  deliberately reduces a throwable to its short class name plus an AWS error code. PHP stack-trace
+  arguments are outside this boundary and can contain caller arguments such as plaintext.
 
 ## Testing approach
 
