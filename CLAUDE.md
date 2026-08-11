@@ -29,9 +29,11 @@ Four layers, wired top-down by `EncryptedS3DiskFactory::make()`:
 
 1. `EncryptedS3ServiceProvider` — `Storage::extend('encrypted-s3', …)`, auto-discovered via
    `composer.json` `extra.laravel.providers`.
-2. `EncryptedS3DiskFactory` — validates config, builds `S3Client` + `KmsClient` (KMS region and
-   credentials fall back to the disk's), and assembles the stack. Config errors throw
-   `InvalidConfigurationException` at disk-construction time, not on first I/O.
+2. `EncryptedS3DiskFactory` — wiring only: `Support\DiskConfiguration` validates the disk config,
+   while `Support\AwsClientSettings` derives the `S3Client` + `KmsClient` settings (KMS region and
+   credentials fall back to the disk's). The factory assembles the stack and passes the raw disk
+   config through to Laravel/Flysystem. Config errors throw `InvalidConfigurationException` at
+   disk-construction time, not on first I/O.
 3. `Flysystem\EncryptedS3Adapter` — the split point. `read`/`readStream`/`write`/`writeStream` go
    through `S3EncryptionClientV3`; **everything else delegates to a wrapped `AwsS3V3Adapter`**
    (`$this->inner`). That is why `fileSize()` reports ciphertext size and `mimeType()` reports

@@ -44,3 +44,13 @@ _Avoid_: wrapper, header blob
 **Object location**:
 The place where an object exists — its bucket and the key prefix leading to it.
 _Avoid_: storage coordinates
+
+**Disk configuration**:
+The validated form of one encrypted disk's settings, from which every other part of the package is
+built.
+_Avoid_: config array, options
+
+**Client settings**:
+The AWS SDK client configuration derived from a disk configuration, including how the KMS client
+inherits region and credentials from the disk.
+_Avoid_: client config, connection settings
