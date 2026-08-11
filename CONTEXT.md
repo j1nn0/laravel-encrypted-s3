@@ -54,3 +54,8 @@ _Avoid_: config array, options
 The AWS SDK client configuration derived from a disk configuration, including how the KMS client
 inherits region and credentials from the disk.
 _Avoid_: client config, connection settings
+
+**Failure reason**:
+The redacted description of a failed crypto path operation, carrying only what is safe to surface:
+a short exception class name and an AWS error code.
+_Avoid_: error message, exception detail

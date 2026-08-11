@@ -4,9 +4,9 @@ declare(strict_types=1);
 
 namespace J1nn0\EncryptedS3\Flysystem;
 
-use Aws\Exception\AwsException;
 use Aws\S3\Crypto\S3EncryptionClientV3;
 use J1nn0\EncryptedS3\Support\EncryptedS3Arguments;
+use J1nn0\EncryptedS3\Support\SafeFailureReason;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use League\Flysystem\Config;
 use League\Flysystem\FileAttributes;
@@ -55,7 +55,7 @@ final class EncryptedS3Adapter implements FilesystemAdapter
 
             return (string) $result['Body'];
         } catch (Throwable $exception) {
-            throw UnableToReadFile::fromLocation($path, $this->exceptionReason($exception), $exception);
+            throw UnableToReadFile::fromLocation($path, SafeFailureReason::from($exception), $exception);
         }
     }
 
@@ -77,7 +77,7 @@ final class EncryptedS3Adapter implements FilesystemAdapter
 
             return $stream;
         } catch (Throwable $exception) {
-            throw UnableToReadFile::fromLocation($path, $this->exceptionReason($exception), $exception);
+            throw UnableToReadFile::fromLocation($path, SafeFailureReason::from($exception), $exception);
         }
     }
 
@@ -144,30 +144,7 @@ final class EncryptedS3Adapter implements FilesystemAdapter
         try {
             $this->encryptionClient->putObject($this->arguments->forPut($path, $contents, $config));
         } catch (Throwable $exception) {
-            throw UnableToWriteFile::atLocation($path, $this->exceptionReason($exception), $exception);
+            throw UnableToWriteFile::atLocation($path, SafeFailureReason::from($exception), $exception);
         }
-    }
-
-    private function exceptionReason(Throwable $exception): string
-    {
-        $class = $exception::class;
-        $separator = strrpos($class, '\\');
-        $reason = $separator === false ? $class : substr($class, $separator + 1);
-
-        for ($current = $exception; $current !== null; $current = $current->getPrevious()) {
-            if (! $current instanceof AwsException) {
-                continue;
-            }
-
-            $errorCode = $current->getAwsErrorCode();
-
-            if ($errorCode !== null && $errorCode !== '') {
-                return $reason.' ('.$errorCode.')';
-            }
-
-            break;
-        }
-
-        return $reason;
     }
 }
