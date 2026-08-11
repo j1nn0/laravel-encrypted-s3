@@ -49,7 +49,8 @@ Four layers, wired top-down by `EncryptedS3DiskFactory::make()`:
 adapter receives `bucket()` and `root()` from it, while `Support\EncryptedS3Arguments` uses its
 `key()` method, so encrypted and delegated paths derive from the same object location. Because the
 delegated adapter constructs its own `PathPrefixer`, `ObjectLocation` keeps a separate one for
-encrypted keys. `EncryptedS3Arguments` is the single place SDK request arguments are built:
+encrypted keys; `docs/adr/0003-object-location-does-not-build-the-delegated-adapter.md` records why
+the two are not collapsed. `EncryptedS3Arguments` is the single place SDK request arguments are built:
 `forPut()` and `forGet()` share one private `commonArguments()`, so the six arguments both requests
 need — including the `@MetadataStrategy` pin — are written once.
 
