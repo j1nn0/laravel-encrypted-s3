@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "laravel-patterns": {
+      "source": "affaan-m/ecc",
+      "sourceType": "github",
+      "skillPath": "skills/laravel-patterns/SKILL.md",
+      "computedHash": "baf54bb931610e753b3c67bebdc333ae1d344a5fe0babcfc60746e9df1c43c5e"
+    },
+    "laravel-verification": {
+      "source": "affaan-m/ecc",
+      "sourceType": "github",
+      "skillPath": "skills/laravel-verification/SKILL.md",
+      "computedHash": "f8b71c1f60d295e1a38545c65a491eb612337d6c3fcaf3f87b364e25b4160a34"
+    }
+  }
+}
