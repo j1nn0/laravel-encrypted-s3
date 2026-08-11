@@ -123,7 +123,7 @@ final class AwsClientSettingsTest extends TestCase
         }
     }
 
-    public function test_for_kms_passes_optional_settings_and_casts_path_style_to_bool(): void
+    public function test_for_kms_ignores_the_s3_only_path_style_setting(): void
     {
         $httpHandler = new stdClass;
         $handler = new stdClass;
@@ -143,7 +143,7 @@ final class AwsClientSettingsTest extends TestCase
         self::assertSame($httpHandler, $settings['http_handler']);
         self::assertSame($handler, $settings['handler']);
         self::assertTrue($settings['debug']);
-        self::assertFalse($settings['use_path_style_endpoint']);
+        self::assertArrayNotHasKey('use_path_style_endpoint', $settings);
         self::assertSame(2, $settings['retries']);
         self::assertSame(['timeout' => 3], $settings['http']);
     }

@@ -45,7 +45,7 @@ final class AwsClientSettings
         ];
 
         $this->addCredentials($clientConfig, $config);
-        $this->addOptionalClientSettings($clientConfig, $config);
+        $this->addOptionalClientSettings($clientConfig, $config, includePathStyleEndpoint: true);
 
         return $clientConfig;
     }
@@ -100,15 +100,18 @@ final class AwsClientSettings
      * @param  array<string, mixed>  $clientConfig
      * @param  array<string, mixed>  $config
      */
-    private function addOptionalClientSettings(array &$clientConfig, array $config): void
-    {
+    private function addOptionalClientSettings(
+        array &$clientConfig,
+        array $config,
+        bool $includePathStyleEndpoint = false,
+    ): void {
         foreach (['endpoint', 'http_handler', 'handler', 'debug', 'retries', 'http'] as $key) {
             if (array_key_exists($key, $config)) {
                 $clientConfig[$key] = $config[$key];
             }
         }
 
-        if (array_key_exists('use_path_style_endpoint', $config)) {
+        if ($includePathStyleEndpoint && array_key_exists('use_path_style_endpoint', $config)) {
             $clientConfig['use_path_style_endpoint'] = (bool) $config['use_path_style_endpoint'];
         }
     }

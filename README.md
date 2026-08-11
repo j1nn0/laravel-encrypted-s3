@@ -70,8 +70,9 @@ This is a complete disk configuration example:
 Only the AWS SDK client settings shown above are forwarded — `endpoint`,
 `use_path_style_endpoint`, `retries`, `http`, `http_handler`, `handler`, and
 `debug`. Anything else in the disk configuration is ignored rather than passed
-to the SDK. The same keys may be set under `kms` for the KMS client; unlike the
-region and credentials, they are not inherited from the disk.
+to the SDK. The common settings may be set under `kms` for the KMS client;
+`use_path_style_endpoint` is S3-only. Unlike the region and credentials, common
+settings are not inherited from the disk.
 
 `root` is an S3 key prefix. `visibility` controls the S3 ACL, and `throw`
 retains Laravel's normal filesystem exception behavior. `options` is filtered
