@@ -1,6 +1,12 @@
 {
   "version": 1,
   "skills": {
+    "agent-orchestration": {
+      "source": "j1nn0/skills",
+      "sourceType": "github",
+      "skillPath": "skills/agent-orchestration/SKILL.md",
+      "computedHash": "48b307b8fff9418d053aeb64978aa5b5aa662200c11e9b7bdf4b02527ae93272"
+    },
     "laravel-patterns": {
       "source": "affaan-m/ecc",
       "sourceType": "github",
