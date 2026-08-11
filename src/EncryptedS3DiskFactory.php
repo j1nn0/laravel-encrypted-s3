@@ -11,6 +11,7 @@ use Aws\S3\S3Client;
 use J1nn0\EncryptedS3\Exceptions\InvalidConfigurationException;
 use J1nn0\EncryptedS3\Filesystem\EncryptedS3Filesystem;
 use J1nn0\EncryptedS3\Flysystem\EncryptedS3Adapter;
+use J1nn0\EncryptedS3\Support\EncryptedS3Arguments;
 use J1nn0\EncryptedS3\Support\EncryptionOptions;
 use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use League\Flysystem\AwsS3V3\PortableVisibilityConverter;
@@ -63,16 +64,19 @@ final class EncryptedS3DiskFactory
             );
         }
 
-        $adapter = new EncryptedS3Adapter(
-            $encryptionClient,
+        $arguments = new EncryptedS3Arguments(
             $materialsProvider,
-            $inner,
             $bucket,
             new PathPrefixer($root),
             $mimeTypeDetector,
             $visibility,
             $encryptionOptions,
             $putOptions,
+        );
+        $adapter = new EncryptedS3Adapter(
+            $encryptionClient,
+            $inner,
+            $arguments,
         );
         $filesystem = new Filesystem($adapter, $config);
 
