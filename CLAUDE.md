@@ -18,7 +18,7 @@ vendor/bin/phpunit --filter test_put_and_get_round_trip_plaintext   # single tes
 vendor/bin/phpunit tests/Feature/EncryptedS3FilesystemTest.php      # single file
 composer lint                                   # Pint (laravel preset) in --test mode
 vendor/bin/pint                                 # apply style fixes
-composer analyse                                # PHPStan with Larastan, level 6 over src + tests
+composer analyse                                # PHPStan with Larastan, level 10 over src + tests
 ```
 
 PHPUnit runs with `failOnRisky` and `failOnWarning` — an E_USER_WARNING from the AWS SDK fails the

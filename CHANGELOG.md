@@ -12,6 +12,10 @@ Encryption V3. Cryptography is delegated to the AWS SDK.
 - `response()`, `download()`, and `serve()` now send the plaintext `Content-Length`
   measured from the decrypted stream instead of the ciphertext size.
 
+### Changed
+
+- PHPStan analysis now runs with Larastan at level 10 over `src` and `tests`.
+
 ### Added
 
 - Encrypted writes do not send a default ACL. `visibility` or an explicit
