@@ -343,6 +343,73 @@ final class EncryptedS3FilesystemTest extends TestCase
         self::assertSame(strlen($plain) + 16, Storage::disk()->size('sized.txt'));
     }
 
+    public function test_download_measures_plaintext_length_and_streams_the_body_once(): void
+    {
+        $plain = "download plaintext\x00";
+        /** @var EncryptedS3Filesystem $disk */
+        $disk = Storage::disk();
+        $disk->put('download.txt', $plain, ['mimetype' => 'text/plain']);
+
+        self::assertNotSame(strlen($plain), $disk->size('download.txt'));
+
+        $response = $disk->download('download.txt', 'attachment-name.txt');
+
+        self::assertSame((string) strlen($plain), $response->headers->get('Content-Length'));
+        self::assertStringContainsString('attachment', $response->headers->get('Content-Disposition'));
+        self::assertStringContainsString('attachment-name.txt', $response->headers->get('Content-Disposition'));
+
+        ob_start();
+        $response->sendContent();
+        $body = ob_get_clean();
+
+        self::assertSame($plain, $body);
+
+        $getRequests = array_filter(
+            $this->aws->s3Requests,
+            static fn (array $request): bool => $request['command'] === 'GetObject',
+        );
+        self::assertCount(1, $getRequests);
+    }
+
+    public function test_response_measures_plaintext_length_and_preserves_content_type(): void
+    {
+        $plain = 'response plaintext';
+        /** @var EncryptedS3Filesystem $disk */
+        $disk = Storage::disk();
+        $disk->put('response.txt', $plain, ['mimetype' => 'text/plain']);
+
+        $response = $disk->response('response.txt', 'inline-name.txt');
+
+        self::assertSame((string) strlen($plain), $response->headers->get('Content-Length'));
+        self::assertSame('text/plain', $response->headers->get('Content-Type'));
+        self::assertStringContainsString('inline', $response->headers->get('Content-Disposition'));
+        self::assertStringContainsString('inline-name.txt', $response->headers->get('Content-Disposition'));
+
+        ob_start();
+        $response->sendContent();
+        $body = ob_get_clean();
+
+        self::assertSame($plain, $body);
+    }
+
+    public function test_response_keeps_a_caller_supplied_content_length(): void
+    {
+        $plain = 'caller supplied length';
+        /** @var EncryptedS3Filesystem $disk */
+        $disk = Storage::disk();
+        $disk->put('supplied-length.txt', $plain);
+
+        $response = $disk->response('supplied-length.txt', null, ['Content-Length' => '123']);
+
+        self::assertSame('123', $response->headers->get('Content-Length'));
+
+        ob_start();
+        $response->sendContent();
+        $body = ob_get_clean();
+
+        self::assertSame($plain, $body);
+    }
+
     public function test_checksum_is_calculated_from_plaintext(): void
     {
         $plain = 'checksum plaintext';
