@@ -55,6 +55,7 @@ final class EncryptedS3DiskFactory
         );
         $adapter = new EncryptedS3Adapter(
             $encryptionClient,
+            $s3Client,
             $inner,
             $arguments,
         );

@@ -7,6 +7,7 @@ namespace J1nn0\EncryptedS3\Tests\Unit;
 use Aws\Crypto\MaterialsProviderV3;
 use Aws\Result;
 use Aws\S3\Crypto\S3EncryptionClientV3;
+use Aws\S3\S3ClientInterface;
 use J1nn0\EncryptedS3\Flysystem\EncryptedS3Adapter;
 use J1nn0\EncryptedS3\Support\EncryptedS3Arguments;
 use J1nn0\EncryptedS3\Support\EncryptionOptions;
@@ -37,6 +38,7 @@ final class EncryptedS3AdapterTest extends TestCase
         $encryptionClient->method('getObject')->willReturn(new Result(['Body' => null]));
         $adapter = new EncryptedS3Adapter(
             $encryptionClient,
+            $this->createStub(S3ClientInterface::class),
             $this->createStub(AwsS3V3Adapter::class),
             $arguments,
         );
