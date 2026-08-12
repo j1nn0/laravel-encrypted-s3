@@ -200,6 +200,27 @@ final class EncryptedS3Adapter implements FilesystemAdapter
         }
 
         try {
+            $head = $this->s3Client->headObject([
+                'Bucket' => $arguments['sourceBucket'],
+                'Key' => $arguments['sourceKey'],
+            ]);
+        } catch (Throwable $exception) {
+            throw UnableToCopyFile::because(
+                SafeFailureReason::from($exception),
+                $source,
+                $destination,
+            );
+        }
+
+        $metadata = $head['Metadata'] ?? [];
+
+        try {
+            $this->arguments->assertCopySourceIsEncrypted(is_array($metadata) ? $metadata : []);
+        } catch (InvalidConfigurationException $exception) {
+            throw UnableToCopyFile::because($exception->getMessage(), $source, $destination);
+        }
+
+        try {
             $this->s3Client->copy(
                 $arguments['sourceBucket'],
                 $arguments['sourceKey'],

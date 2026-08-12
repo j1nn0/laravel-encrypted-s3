@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace J1nn0\EncryptedS3\Support;
 
 use Aws\Crypto\MaterialsProviderV3;
+use Aws\Crypto\MetadataEnvelope;
 use Aws\S3\Crypto\HeadersMetadataStrategy;
 use J1nn0\EncryptedS3\Exceptions\InvalidConfigurationException;
 use League\Flysystem\AwsS3V3\VisibilityConverter;
@@ -17,6 +18,8 @@ use League\MimeTypeDetection\MimeTypeDetector;
 final class EncryptedS3Arguments
 {
     private const OPTION_MIMETYPE = 'mimetype';
+
+    private const COPY_SOURCE_ENCRYPTION_ERROR = 'The copy source is not a client-side encrypted V3 object.';
 
     /**
      * @param  array<string, mixed>  $defaultPutOptions
@@ -97,6 +100,28 @@ final class EncryptedS3Arguments
                 'params' => $options,
             ],
         ];
+    }
+
+    /**
+     * @param  array<mixed, mixed>  $metadata
+     *
+     * @throws InvalidConfigurationException
+     */
+    public function assertCopySourceIsEncrypted(array $metadata): void
+    {
+        $metadata = array_change_key_case($metadata, CASE_LOWER);
+
+        foreach (MetadataEnvelope::getV3Fields() as $field) {
+            if (! is_string($field) || ! array_key_exists(strtolower($field), $metadata)) {
+                throw new InvalidConfigurationException(self::COPY_SOURCE_ENCRYPTION_ERROR);
+            }
+        }
+
+        foreach (MetadataEnvelope::getV2Fields() as $field) {
+            if (is_string($field) && array_key_exists(strtolower($field), $metadata)) {
+                throw new InvalidConfigurationException(self::COPY_SOURCE_ENCRYPTION_ERROR);
+            }
+        }
     }
 
     /**

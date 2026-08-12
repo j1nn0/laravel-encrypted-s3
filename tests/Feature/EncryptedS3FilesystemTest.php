@@ -790,6 +790,87 @@ final class EncryptedS3FilesystemTest extends TestCase
         }
     }
 
+    public function test_copy_rejects_a_plaintext_source_without_creating_the_destination(): void
+    {
+        $this->aws->putRaw('plaintext-source.txt', 'TOTALLY-PLAINTEXT-CONTENT', [
+            'x-amz-meta-secret' => 'SENSITIVE-METADATA-VALUE',
+        ]);
+
+        try {
+            Storage::disk()->copy('plaintext-source.txt', 'plaintext-copy.txt');
+            self::fail('The plaintext source was copied.');
+        } catch (UnableToCopyFile $exception) {
+            self::assertStringContainsString('not a client-side encrypted V3 object', $exception->getMessage());
+            self::assertStringNotContainsString('SENSITIVE-METADATA-VALUE', $exception->getMessage());
+            self::assertStringNotContainsString('TOTALLY-PLAINTEXT-CONTENT', $exception->getMessage());
+        }
+
+        self::assertArrayNotHasKey('plaintext-copy.txt', $this->aws->objects);
+    }
+
+    public function test_copy_rejects_a_v2_source(): void
+    {
+        $this->aws->putRaw('v2-source.txt', 'legacy ciphertext', $this->v2EnvelopeHeaders());
+
+        $this->expectException(UnableToCopyFile::class);
+        Storage::disk()->copy('v2-source.txt', 'v2-copy.txt');
+    }
+
+    public function test_copy_rejects_a_source_with_v2_and_v3_fields(): void
+    {
+        Storage::disk()->put('v3-source.txt', 'copyable plaintext');
+        $headers = $this->envelopeHeaders('v3-source.txt') + $this->v2EnvelopeHeaders();
+        $this->aws->putRaw('mixed-source.txt', 'mixed ciphertext', $headers);
+
+        $this->expectException(UnableToCopyFile::class);
+        Storage::disk()->copy('mixed-source.txt', 'mixed-copy.txt');
+    }
+
+    public function test_copy_rejects_a_source_with_a_missing_v3_field(): void
+    {
+        Storage::disk()->put('v3-source.txt', 'copyable plaintext');
+        $headers = $this->envelopeHeaders('v3-source.txt');
+        $field = MetadataEnvelope::getV3Fields()[0] ?? null;
+        self::assertIsString($field);
+        unset($headers['x-amz-meta-'.$field]);
+        $this->aws->putRaw('missing-field-source.txt', 'incomplete ciphertext', $headers);
+
+        $this->expectException(UnableToCopyFile::class);
+        Storage::disk()->copy('missing-field-source.txt', 'missing-field-copy.txt');
+    }
+
+    public function test_move_rejects_a_plaintext_source_without_deleting_it(): void
+    {
+        $this->aws->putRaw('plaintext-move-source.txt', 'plaintext source');
+
+        try {
+            Storage::disk()->move('plaintext-move-source.txt', 'plaintext-move-target.txt');
+            self::fail('The plaintext source was moved.');
+        } catch (UnableToMoveFile) {
+            self::assertArrayHasKey('plaintext-move-source.txt', $this->aws->objects);
+            self::assertArrayNotHasKey('plaintext-move-target.txt', $this->aws->objects);
+        }
+    }
+
+    public function test_copy_returns_false_for_a_plaintext_source_when_throw_is_disabled(): void
+    {
+        $this->configureDisk(['throw' => false]);
+        $this->aws->putRaw('plaintext-source.txt', 'plaintext source');
+
+        self::assertFalse(Storage::disk()->copy('plaintext-source.txt', 'plaintext-copy.txt'));
+    }
+
+    public function test_copy_redacts_a_missing_source_failure(): void
+    {
+        try {
+            Storage::disk()->copy('missing-source.txt', 'missing-copy.txt');
+            self::fail('The missing source failure was swallowed.');
+        } catch (UnableToCopyFile $exception) {
+            self::assertStringContainsString('S3Exception (NoSuchKey)', $exception->getMessage());
+            self::assertStringNotContainsString('Not found.', $exception->getMessage());
+        }
+    }
+
     public function test_copy_sends_an_acl_for_explicit_per_call_visibility(): void
     {
         Storage::disk()->put('source.txt', 'copyable plaintext');
@@ -924,6 +1005,21 @@ final class EncryptedS3FilesystemTest extends TestCase
             static fn (string $header): bool => str_starts_with($header, 'x-amz-meta-x-amz-'),
             ARRAY_FILTER_USE_KEY,
         );
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function v2EnvelopeHeaders(): array
+    {
+        $headers = [];
+
+        foreach (MetadataEnvelope::getV2Fields() as $field) {
+            self::assertIsString($field);
+            $headers['x-amz-meta-'.$field] = 'legacy-'.$field;
+        }
+
+        return $headers;
     }
 
     /**

@@ -6,6 +6,7 @@ namespace J1nn0\EncryptedS3\Tests\Integration;
 
 use Aws\Crypto\MetadataEnvelope;
 use Illuminate\Support\Facades\Storage;
+use League\Flysystem\UnableToCopyFile;
 use League\Flysystem\UnableToReadFile;
 use Psr\Http\Message\StreamInterface;
 use RuntimeException;
@@ -162,6 +163,26 @@ final class MotoIntegrationTest extends TestCase
 
         self::assertTrue(Storage::disk()->copy($source, $destination));
         self::assertSame($plain, Storage::disk()->get($destination));
+    }
+
+    public function test_copy_rejects_a_plaintext_source_over_http(): void
+    {
+        $source = 'plaintext-source.txt';
+        $destination = 'plaintext-copy.txt';
+
+        $this->s3->putObject([
+            'Bucket' => $this->bucket,
+            'Key' => $source,
+            'Body' => 'TOTALLY-PLAINTEXT-CONTENT',
+        ]);
+
+        try {
+            Storage::disk()->copy($source, $destination);
+            self::fail('The plaintext source was copied.');
+        } catch (UnableToCopyFile) {
+            self::assertFalse(Storage::disk()->exists($destination));
+        }
+
     }
 
     public function test_move_copies_readably_and_deletes_the_source_over_http(): void
