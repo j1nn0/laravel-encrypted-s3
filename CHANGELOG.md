@@ -29,3 +29,6 @@ Encryption V3. Cryptography is delegated to the AWS SDK.
 
 - Objects written with the AWS SDK instruction-file metadata strategy or with
   legacy V1/V2 envelopes cannot be read by this package.
+- `read()` requires the decrypted response body to be a stream and fails closed
+  otherwise, so a malformed response can no longer be returned to the caller as
+  an empty string.

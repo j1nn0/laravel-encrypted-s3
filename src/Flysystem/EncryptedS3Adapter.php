@@ -56,8 +56,14 @@ final class EncryptedS3Adapter implements FilesystemAdapter
     {
         try {
             $result = $this->encryptionClient->getObject($this->arguments->forGet($path));
+            $body = $result['Body'];
 
-            return (string) $result['Body'];
+            if (! $body instanceof StreamInterface) {
+                // A malformed response must fail closed instead of becoming an empty string.
+                throw new RuntimeException('The encrypted response body is not a stream.');
+            }
+
+            return (string) $body;
         } catch (Throwable $exception) {
             throw UnableToReadFile::fromLocation($path, SafeFailureReason::from($exception), $exception);
         }
