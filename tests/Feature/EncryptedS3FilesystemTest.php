@@ -642,6 +642,18 @@ final class EncryptedS3FilesystemTest extends TestCase
         self::assertTrue($disk->exists('encrypted-directory'));
     }
 
+    public function test_make_directory_makes_one_generate_data_key_request(): void
+    {
+        Storage::disk()->makeDirectory('single-data-key-directory');
+
+        $generateDataKeyRequests = array_filter(
+            $this->aws->kmsRequests,
+            static fn (array $request): bool => str_ends_with($request['target'], '.GenerateDataKey'),
+        );
+
+        self::assertCount(1, $generateDataKeyRequests);
+    }
+
     public function test_make_directory_succeeds_on_an_acl_disabled_bucket(): void
     {
         $this->aws->disableAcls();
@@ -735,6 +747,14 @@ final class EncryptedS3FilesystemTest extends TestCase
         self::assertIsArray($request);
         self::assertSame('GetObjectAcl', $request['command']);
         self::assertSame('test-bucket/visibility.txt', $request['path']);
+    }
+
+    public function test_visibility_reads_private_from_an_acl_disabled_bucket(): void
+    {
+        $this->aws->disableAcls();
+        Storage::disk()->put('acl-disabled-visibility.txt', 'body');
+
+        self::assertSame('private', Storage::disk()->visibility('acl-disabled-visibility.txt'));
     }
 
     public function test_set_visibility_sends_the_matching_acl_for_public_and_private(): void
