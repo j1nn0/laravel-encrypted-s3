@@ -88,8 +88,12 @@ copies send no canned ACL unless the user asks for one through `visibility`,
 Per-call Flysystem `Config` options override the disk-level `options` array. If
 both are set, `visibility` is applied afterwards and wins over an explicit
 `ACL`. `copy` and `move` do not retain source visibility and do not issue
-`GetObjectAcl`; an explicit `MetadataDirective` other than `COPY` is rejected
-so the CSE envelope metadata cannot be discarded.
+`GetObjectAcl`. Before copying, they require the source metadata to contain a
+complete CSE V3 envelope and no V2 envelope fields; non-CSE sources are rejected
+before a destination is created. An explicit `MetadataDirective` other than
+`COPY` is rejected so the CSE envelope metadata cannot be discarded. Each copy
+performs one validation `HeadObject` in addition to the SDK copy strategy's
+`HeadObject`.
 `options['ACL']` is the route for canned ACLs that Flysystem visibility cannot
 express, such as `bucket-owner-full-control`. Explicit ACLs can fail on
 ACL-disabled buckets, so omit them when using Object Ownership
@@ -161,8 +165,9 @@ The application credentials need, at minimum:
 - `s3:ListBucket`
 - `s3:GetObjectAcl` and `s3:PutObjectAcl` (for visibility operations)
 
-The SDK's server-side `copy` and `move` use `HeadObject` first to select the
-copy strategy; `HeadObject` uses the `s3:GetObject` permission. They then use
+The package's server-side `copy` and `move` use one `HeadObject` to verify the
+source CSE V3 envelope, and the SDK uses another `HeadObject` to select the
+copy strategy. `HeadObject` uses the `s3:GetObject` permission. They then use
 `s3:GetObject` on the source and `s3:PutObject` on the destination; there is no
 separate `s3:CopyObject` IAM action.
 
@@ -194,8 +199,8 @@ implementation is not streaming internally.
 | `exists` / `fileExists` / `directoryExists` | Fully supported | Unrelated to encryption. |
 | `delete` / `deleteDirectory` | Fully supported | Unrelated to encryption. |
 | `makeDirectory` / `createDirectory` | Supported with constraints | Writes a CSE-encrypted trailing-slash marker through the put path. It sends no ACL by default, makes one KMS `GenerateDataKey` call, and accepts an explicitly configured `visibility` or `directory_visibility`. |
-| `copy` | Supported with constraints | Uses SDK server-side copy, preserving the encryption envelope and original KMS encryption context without re-encryption. It sends no ACL or `GetObjectAcl` request unless an ACL is explicitly requested; `MetadataDirective` is fixed to `COPY`, and `REPLACE` is rejected. |
-| `move` | Supported with constraints | Copy followed by delete. The source is deleted only after the copy succeeds, with the same envelope, ACL, and metadata-directive rules as `copy`. |
+| `copy` | Supported with constraints | Uses SDK server-side copy, preserving the encryption envelope and original KMS encryption context without re-encryption. It first verifies that the source has every CSE V3 envelope field and no V2 field; non-CSE sources are rejected before the destination is created. It sends no ACL or `GetObjectAcl` request unless an ACL is explicitly requested; `MetadataDirective` is fixed to `COPY`, and `REPLACE` is rejected. |
+| `move` | Supported with constraints | Copy followed by delete. The same CSE V3 source-envelope check and ACL/metadata-directive rules as `copy` apply; the source is deleted only after a validated copy succeeds. |
 | `size` | Supported with constraints | Returns ciphertext size, including the 16-byte GCM tag, not plaintext size. |
 | `mimeType` | Supported with constraints | Returns the plaintext MIME type detected or supplied at write time. The MIME type is exposed as unencrypted S3 metadata. |
 | `lastModified` | Fully supported | Unrelated to encryption. |
@@ -244,6 +249,10 @@ implementation is not streaming internally.
   the associated memory and network cost.
 - MIME type, object key names, and object size are not encrypted.
 - `copy` and `move` preserve the existing envelope and do not re-encrypt.
+- `copy` and `move` fail closed for plaintext, V1, V2, mixed V2/V3, or incomplete
+  CSE metadata. The source must have all V3 envelope fields and no V2 fields;
+  the `x-amz-d` value is only checked for presence. The validation adds one
+  `HeadObject` per copy in addition to the SDK's strategy-selection request.
 - `makeDirectory()` stores its marker with a CSE V3 envelope and performs one
   KMS `GenerateDataKey` call per invocation.
 - `copy()` rejects `MetadataDirective=REPLACE`; the directive is pinned to

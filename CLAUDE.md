@@ -61,7 +61,8 @@ the two are not collapsed. `EncryptedS3Arguments` is the single place SDK reques
 `forPut()` and `forGet()` share one private `commonArguments()`, so the six arguments both requests
 need — including the `@MetadataStrategy` pin — are written once. `forCopy()` builds the source and
 destination keys, pins `MetadataDirective` to `COPY`, and uses `optionsForConfig()` for the same
-explicit ACL resolution as `forPut()`.
+explicit ACL resolution as `forPut()`. Its `assertCopySourceIsEncrypted()` method is a pure
+metadata check using the AWS SDK's `MetadataEnvelope` field definitions.
 
 `Support\EncryptionOptions` is the config value object; it validates in the constructor so an
 invalid commitment policy, security profile, or encryption context can never reach the SDK.
@@ -92,6 +93,13 @@ These are the point of the package. Several are enforced in more than one place;
 - **Copy metadata is pinned to `COPY`.** `EncryptedS3Arguments::forCopy()` rejects an explicit
   `MetadataDirective` other than `COPY`, especially `REPLACE`, because replacing metadata would
   remove the CSE V3 envelope and make the destination unreadable.
+- **Copy sources must be CSE V3 objects.** Before the raw server-side copy, `copy()` issues a
+  `HeadObject` and `EncryptedS3Arguments::assertCopySourceIsEncrypted()` requires every field from
+  `MetadataEnvelope::getV3Fields()` and no field from `getV2Fields()`, after defensive lower-case
+  normalization. This keeps copy validation aligned with the V3 read path's exclusive-map check;
+  plaintext, V1/V2, mixed, or incomplete sources fail closed before a destination is created.
+  The `x-amz-d` commitment value is checked for presence only; its cryptographic validity is the
+  SDK/KMS decryption responsibility, not copy validation.
 - **Reserved and incompatible put options.** `Metadata`, `Body`, `Bucket`, `Key`, and any
   `@`-prefixed key are reserved. `PutOptions::isReserved()` is the single definition of that rule.
   `ContentLength`, `MetadataDirective`, `CopySourceSSECustomerAlgorithm`,
