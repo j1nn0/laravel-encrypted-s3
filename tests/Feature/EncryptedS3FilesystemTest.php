@@ -209,8 +209,8 @@ final class EncryptedS3FilesystemTest extends TestCase
 
     public function test_url_operations_are_always_unsupported(): void
     {
-        /** @var EncryptedS3Filesystem $disk */
         $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
         $disk->buildTemporaryUrlsUsing(static fn (): string => 'https://example.test');
 
         foreach (['url', 'temporaryUrl', 'temporaryUploadUrl'] as $operation) {
@@ -346,17 +346,19 @@ final class EncryptedS3FilesystemTest extends TestCase
     public function test_download_measures_plaintext_length_and_streams_the_body_once(): void
     {
         $plain = "download plaintext\x00";
-        /** @var EncryptedS3Filesystem $disk */
         $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
         $disk->put('download.txt', $plain, ['mimetype' => 'text/plain']);
 
         self::assertNotSame(strlen($plain), $disk->size('download.txt'));
 
         $response = $disk->download('download.txt', 'attachment-name.txt');
+        $contentDisposition = $response->headers->get('Content-Disposition');
+        self::assertNotNull($contentDisposition);
 
         self::assertSame((string) strlen($plain), $response->headers->get('Content-Length'));
-        self::assertStringContainsString('attachment', $response->headers->get('Content-Disposition'));
-        self::assertStringContainsString('attachment-name.txt', $response->headers->get('Content-Disposition'));
+        self::assertStringContainsString('attachment', $contentDisposition);
+        self::assertStringContainsString('attachment-name.txt', $contentDisposition);
 
         ob_start();
         $response->sendContent();
@@ -374,16 +376,18 @@ final class EncryptedS3FilesystemTest extends TestCase
     public function test_response_measures_plaintext_length_and_preserves_content_type(): void
     {
         $plain = 'response plaintext';
-        /** @var EncryptedS3Filesystem $disk */
         $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
         $disk->put('response.txt', $plain, ['mimetype' => 'text/plain']);
 
         $response = $disk->response('response.txt', 'inline-name.txt');
+        $contentDisposition = $response->headers->get('Content-Disposition');
+        self::assertNotNull($contentDisposition);
 
         self::assertSame((string) strlen($plain), $response->headers->get('Content-Length'));
         self::assertSame('text/plain', $response->headers->get('Content-Type'));
-        self::assertStringContainsString('inline', $response->headers->get('Content-Disposition'));
-        self::assertStringContainsString('inline-name.txt', $response->headers->get('Content-Disposition'));
+        self::assertStringContainsString('inline', $contentDisposition);
+        self::assertStringContainsString('inline-name.txt', $contentDisposition);
 
         ob_start();
         $response->sendContent();
@@ -395,8 +399,8 @@ final class EncryptedS3FilesystemTest extends TestCase
     public function test_response_keeps_a_caller_supplied_content_length(): void
     {
         $plain = 'caller supplied length';
-        /** @var EncryptedS3Filesystem $disk */
         $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
         $disk->put('supplied-length.txt', $plain);
 
         $response = $disk->response('supplied-length.txt', null, ['Content-Length' => '123']);
@@ -413,8 +417,8 @@ final class EncryptedS3FilesystemTest extends TestCase
     public function test_checksum_is_calculated_from_plaintext(): void
     {
         $plain = 'checksum plaintext';
-        /** @var EncryptedS3Filesystem $disk */
         $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
         $disk->put('checksum.txt', $plain);
 
         self::assertSame(md5($plain), $disk->checksum('checksum.txt'));
@@ -422,8 +426,8 @@ final class EncryptedS3FilesystemTest extends TestCase
 
     public function test_mime_type_can_be_set_at_write_time(): void
     {
-        /** @var EncryptedS3Filesystem $disk */
         $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
         $disk->put('mime.bin', 'mime body', ['mimetype' => 'application/x-encrypted-test']);
 
         self::assertSame('application/x-encrypted-test', $disk->mimeType('mime.bin'));
@@ -483,8 +487,7 @@ final class EncryptedS3FilesystemTest extends TestCase
     {
         $config = $this->diskConfig();
         unset($config['visibility']);
-        $this->app['config']->set('filesystems.disks.encrypted-s3', $config);
-        $this->app['filesystem']->forgetDisk('encrypted-s3');
+        $this->setDiskConfig($config);
 
         Storage::disk()->put('no-visibility.txt', 'body');
 
@@ -607,8 +610,8 @@ final class EncryptedS3FilesystemTest extends TestCase
 
     public function test_visibility_reads_the_s3_acl(): void
     {
-        /** @var EncryptedS3Filesystem $disk */
         $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
 
         self::assertSame('private', $disk->visibility('visibility.txt'));
 
@@ -713,8 +716,8 @@ final class EncryptedS3FilesystemTest extends TestCase
 
     public function test_basic_metadata_listing_and_delete_operations(): void
     {
-        /** @var EncryptedS3Filesystem $disk */
         $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
         $disk->makeDirectory('folder');
         $disk->put('folder/file.txt', 'file body');
 

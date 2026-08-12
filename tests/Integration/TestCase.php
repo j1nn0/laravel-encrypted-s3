@@ -7,7 +7,11 @@ namespace J1nn0\EncryptedS3\Tests\Integration;
 use Aws\Kms\KmsClient;
 use Aws\S3\S3Client;
 use GuzzleHttp\Client;
+use Illuminate\Config\Repository;
+use Illuminate\Filesystem\FilesystemManager;
+use Illuminate\Foundation\Application;
 use J1nn0\EncryptedS3\EncryptedS3ServiceProvider;
+use LogicException;
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
 use RuntimeException;
 use Throwable;
@@ -100,8 +104,24 @@ abstract class TestCase extends OrchestraTestCase
     protected function configureDisk(array $overrides): void
     {
         $config = array_replace_recursive($this->diskConfig(), $overrides);
-        $this->app['config']->set('filesystems.disks.encrypted-s3', $config);
-        $this->app['filesystem']->forgetDisk('encrypted-s3');
+        $validated = [];
+
+        foreach ($config as $key => $value) {
+            if (! is_string($key)) {
+                throw new LogicException('The test configuration must have string keys.');
+            }
+
+            $validated[$key] = $value;
+        }
+
+        $app = $this->app;
+
+        if (! $app instanceof Application) {
+            throw new LogicException('The test application is not available.');
+        }
+
+        $app->make(Repository::class)->set('filesystems.disks.encrypted-s3', $validated);
+        $app->make(FilesystemManager::class)->forgetDisk('encrypted-s3');
     }
 
     protected function createKmsKey(): string
@@ -111,7 +131,8 @@ abstract class TestCase extends OrchestraTestCase
             'KeySpec' => 'SYMMETRIC_DEFAULT',
             'Description' => 'laravel-encrypted-s3 integration test',
         ]);
-        $keyId = $result['KeyMetadata']['KeyId'] ?? null;
+        $keyMetadata = $result['KeyMetadata'] ?? null;
+        $keyId = is_array($keyMetadata) ? ($keyMetadata['KeyId'] ?? null) : null;
 
         if (! is_string($keyId) || $keyId === '') {
             throw new RuntimeException('Moto returned no KMS key ID from CreateKey.');

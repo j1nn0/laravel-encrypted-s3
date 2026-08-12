@@ -7,6 +7,8 @@ namespace J1nn0\EncryptedS3\Tests\Integration;
 use Aws\Crypto\MetadataEnvelope;
 use Illuminate\Support\Facades\Storage;
 use League\Flysystem\UnableToReadFile;
+use Psr\Http\Message\StreamInterface;
+use RuntimeException;
 
 final class MotoIntegrationTest extends TestCase
 {
@@ -29,7 +31,13 @@ final class MotoIntegrationTest extends TestCase
             'Bucket' => $this->bucket,
             'Key' => 'ciphertext.txt',
         ]);
-        $ciphertext = (string) $raw['Body'];
+        $body = $raw['Body'] ?? null;
+
+        if (! $body instanceof StreamInterface) {
+            throw new RuntimeException('Moto returned a non-stream S3 response body.');
+        }
+
+        $ciphertext = (string) $body;
 
         self::assertNotSame($plain, $ciphertext);
         self::assertStringNotContainsString($plain, $ciphertext);

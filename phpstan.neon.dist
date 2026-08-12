@@ -3,6 +3,8 @@ includes:
 
 parameters:
     level: 6
+    stubFiles:
+        - phpstan/AwsResult.stub
     paths:
         - src
         - tests

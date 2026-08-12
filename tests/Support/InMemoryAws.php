@@ -95,7 +95,6 @@ final class InMemoryAws
         return null;
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function handleS3(CommandInterface $command, RequestInterface $request): Result
     {
         $requestBody = (string) $request->getBody();
@@ -130,7 +129,6 @@ final class InMemoryAws
         };
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function handleKms(CommandInterface $command, RequestInterface $request): Result
     {
         $target = $request->getHeaderLine('X-Amz-Target');
@@ -169,7 +167,6 @@ final class InMemoryAws
     /**
      * @param  array<string, string>  $headers
      */
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function putObject(string $key, string $body, array $headers): Result
     {
         $this->objects[$key] = [
@@ -181,7 +178,6 @@ final class InMemoryAws
         return new Result(['ETag' => '"'.md5($body).'"']);
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function putObjectAcl(CommandInterface $command): Result
     {
         if ($this->aclDisabled) {
@@ -194,7 +190,6 @@ final class InMemoryAws
         return new Result;
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function getObject(CommandInterface $command, string $key): Result
     {
         if (! isset($this->objects[$key])) {
@@ -214,7 +209,6 @@ final class InMemoryAws
         ]);
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function headObject(CommandInterface $command, string $key): Result
     {
         if (! isset($this->objects[$key])) {
@@ -232,7 +226,6 @@ final class InMemoryAws
         ]);
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function deleteObject(string $key): Result
     {
         unset($this->objects[$key]);
@@ -240,7 +233,6 @@ final class InMemoryAws
         return new Result;
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function deleteObjects(CommandInterface $command): Result
     {
         $delete = $command['Delete'] ?? [];
@@ -260,7 +252,6 @@ final class InMemoryAws
     /**
      * @param  array<string, string>  $requestHeaders
      */
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function copyObject(
         CommandInterface $command,
         RequestInterface $request,
@@ -291,11 +282,10 @@ final class InMemoryAws
         return new Result(['CopyObjectResult' => ['ETag' => '"'.md5($sourceObject['body']).'"']]);
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function listObjects(CommandInterface $command): Result
     {
-        $prefix = (string) ($command['Prefix'] ?? '');
-        $delimiter = (string) ($command['Delimiter'] ?? '');
+        $prefix = $this->commandString($command, 'Prefix');
+        $delimiter = $this->commandString($command, 'Delimiter');
         $contents = [];
         $commonPrefixes = [];
 
@@ -340,6 +330,21 @@ final class InMemoryAws
         }
 
         return new Result($result);
+    }
+
+    private function commandString(CommandInterface $command, string $key): string
+    {
+        $value = $command[$key] ?? null;
+
+        if ($value === null) {
+            return '';
+        }
+
+        if (! is_string($value)) {
+            throw new LogicException('InMemoryAws expected a string S3 command option.');
+        }
+
+        return $value;
     }
 
     /**

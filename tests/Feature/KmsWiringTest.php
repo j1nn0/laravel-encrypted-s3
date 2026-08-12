@@ -10,6 +10,7 @@ use J1nn0\EncryptedS3\Tests\TestCase;
 use League\Flysystem\UnableToReadFile;
 use League\Flysystem\UnableToWriteFile;
 use PHPUnit\Framework\Attributes\DataProvider;
+use RuntimeException;
 use Throwable;
 
 final class KmsWiringTest extends TestCase
@@ -202,9 +203,21 @@ final class KmsWiringTest extends TestCase
     private function kmsBody(array $request): array
     {
         $body = json_decode($request['body'], true, 512, JSON_THROW_ON_ERROR);
-        self::assertIsArray($body);
+        if (! is_array($body)) {
+            throw new RuntimeException('The KMS request body is not an object.');
+        }
 
-        return $body;
+        $validated = [];
+
+        foreach ($body as $key => $value) {
+            if (! is_string($key)) {
+                throw new RuntimeException('The KMS request body must have string keys.');
+            }
+
+            $validated[$key] = $value;
+        }
+
+        return $validated;
     }
 
     /**
