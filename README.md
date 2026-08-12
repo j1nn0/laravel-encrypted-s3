@@ -207,7 +207,7 @@ implementation is not streaming internally.
 | `delete` / `deleteDirectory` | Fully supported | Unrelated to encryption. |
 | `makeDirectory` / `createDirectory` | Supported with constraints | Writes a CSE-encrypted trailing-slash marker through the put path. It sends no ACL by default, makes one KMS `GenerateDataKey` call, and accepts an explicitly configured `visibility` or `directory_visibility`. |
 | `copy` | Supported with constraints | Uses SDK server-side copy, preserving the encryption envelope and original KMS encryption context without re-encryption. It first verifies that the source has every CSE V3 envelope field and no V2 field; non-CSE sources are rejected before the destination is created. It sends no ACL or `GetObjectAcl` request unless an ACL is explicitly requested; `MetadataDirective` is fixed to `COPY`, and `REPLACE` is rejected. |
-| `move` | Supported with constraints | Copy followed by delete. The same CSE V3 source-envelope check and ACL/metadata-directive rules as `copy` apply; the source is deleted only after a validated copy succeeds. |
+| `move` | Supported with constraints | Copy followed by delete. The same CSE V3 source-envelope check and ACL/metadata-directive rules as `copy` apply; the source is deleted only after a validated copy succeeds. If deletion fails after the copy succeeds, the destination remains and the source is undeleted. |
 | `size` | Supported with constraints | Returns ciphertext size, including the 16-byte GCM tag, not plaintext size. |
 | `mimeType` | Supported with constraints | Returns the plaintext MIME type detected or supplied at write time. The MIME type is exposed as unencrypted S3 metadata. |
 | `lastModified` | Fully supported | Unrelated to encryption. |

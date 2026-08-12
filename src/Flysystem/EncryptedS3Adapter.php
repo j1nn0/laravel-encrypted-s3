@@ -6,6 +6,7 @@ namespace J1nn0\EncryptedS3\Flysystem;
 
 use Aws\S3\Crypto\S3EncryptionClientV3;
 use Aws\S3\S3ClientInterface;
+use J1nn0\EncryptedS3\Exceptions\CopyFailedException;
 use J1nn0\EncryptedS3\Exceptions\InvalidConfigurationException;
 use J1nn0\EncryptedS3\Support\EncryptedS3Arguments;
 use J1nn0\EncryptedS3\Support\SafeFailureReason;
@@ -165,10 +166,16 @@ final class EncryptedS3Adapter implements FilesystemAdapter
         }
 
         try {
-            $this->copy($source, $destination, $config);
+            $this->copyObject($source, $destination, $config);
             $this->delete($source);
         } catch (InvalidConfigurationException $exception) {
             throw $exception;
+        } catch (CopyFailedException $exception) {
+            throw UnableToMoveFile::because(
+                $exception->getMessage(),
+                $source,
+                $destination,
+            );
         } catch (Throwable $exception) {
             throw UnableToMoveFile::because(
                 SafeFailureReason::from($exception),
@@ -188,15 +195,28 @@ final class EncryptedS3Adapter implements FilesystemAdapter
         }
 
         try {
+            $this->copyObject($source, $destination, $config);
+        } catch (CopyFailedException $exception) {
+            throw UnableToCopyFile::because(
+                $exception->getMessage(),
+                $source,
+                $destination,
+            );
+        }
+    }
+
+    /**
+     * @throws InvalidConfigurationException
+     * @throws CopyFailedException
+     */
+    private function copyObject(string $source, string $destination, Config $config): void
+    {
+        try {
             $arguments = $this->arguments->forCopy($source, $destination, $config);
         } catch (InvalidConfigurationException $exception) {
             throw $exception;
         } catch (Throwable $exception) {
-            throw UnableToCopyFile::because(
-                SafeFailureReason::from($exception),
-                $source,
-                $destination,
-            );
+            throw new CopyFailedException(SafeFailureReason::from($exception));
         }
 
         try {
@@ -205,11 +225,7 @@ final class EncryptedS3Adapter implements FilesystemAdapter
                 'Key' => $arguments['sourceKey'],
             ]);
         } catch (Throwable $exception) {
-            throw UnableToCopyFile::because(
-                SafeFailureReason::from($exception),
-                $source,
-                $destination,
-            );
+            throw new CopyFailedException(SafeFailureReason::from($exception));
         }
 
         $metadata = $head['Metadata'] ?? [];
@@ -217,7 +233,9 @@ final class EncryptedS3Adapter implements FilesystemAdapter
         try {
             $this->arguments->assertCopySourceIsEncrypted(is_array($metadata) ? $metadata : []);
         } catch (InvalidConfigurationException $exception) {
-            throw UnableToCopyFile::because($exception->getMessage(), $source, $destination);
+            throw new CopyFailedException($exception->getMessage());
+        } catch (Throwable $exception) {
+            throw new CopyFailedException(SafeFailureReason::from($exception));
         }
 
         try {
@@ -232,11 +250,7 @@ final class EncryptedS3Adapter implements FilesystemAdapter
                 $arguments['options'],
             );
         } catch (Throwable $exception) {
-            throw UnableToCopyFile::because(
-                SafeFailureReason::from($exception),
-                $source,
-                $destination,
-            );
+            throw new CopyFailedException(SafeFailureReason::from($exception));
         }
     }
 

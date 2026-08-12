@@ -14,6 +14,8 @@ Encryption V3. Cryptography is delegated to the AWS SDK.
 - `createDirectory()` failures are normalized to Flysystem's
   `UnableToCreateDirectory`, so Laravel disks with `throw => false` return `false`
   instead of leaking `UnableToWriteFile`.
+- `move()` now reports the same redacted copy failure reason as `copy()`, including
+  source-envelope validation failures and AWS error codes.
 
 ### Changed
 

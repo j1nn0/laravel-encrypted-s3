@@ -877,10 +877,37 @@ final class EncryptedS3FilesystemTest extends TestCase
         try {
             Storage::disk()->move('plaintext-move-source.txt', 'plaintext-move-target.txt');
             self::fail('The plaintext source was moved.');
-        } catch (UnableToMoveFile) {
+        } catch (UnableToMoveFile $exception) {
+            self::assertStringContainsString('not a client-side encrypted V3 object', $exception->getMessage());
             self::assertArrayHasKey('plaintext-move-source.txt', $this->aws->objects);
             self::assertArrayNotHasKey('plaintext-move-target.txt', $this->aws->objects);
         }
+    }
+
+    public function test_move_reports_a_missing_source_failure(): void
+    {
+        try {
+            Storage::disk()->move('missing-move-source.txt', 'missing-move-target.txt');
+            self::fail('The missing source failure was swallowed.');
+        } catch (UnableToMoveFile $exception) {
+            self::assertStringContainsString('S3Exception (NoSuchKey)', $exception->getMessage());
+        }
+    }
+
+    public function test_move_leaves_the_destination_when_delete_fails_after_copy(): void
+    {
+        Storage::disk()->put('delete-failure-source.txt', 'copyable plaintext');
+        $this->aws->failS3With('DeleteObject', 'AccessDenied', 'Delete failed.');
+
+        try {
+            Storage::disk()->move('delete-failure-source.txt', 'delete-failure-target.txt');
+            self::fail('The delete failure was swallowed.');
+        } catch (UnableToMoveFile $exception) {
+            self::assertStringContainsString('UnableToDeleteFile (AccessDenied)', $exception->getMessage());
+        }
+
+        self::assertArrayHasKey('delete-failure-source.txt', $this->aws->objects);
+        self::assertArrayHasKey('delete-failure-target.txt', $this->aws->objects);
     }
 
     public function test_copy_returns_false_for_a_plaintext_source_when_throw_is_disabled(): void

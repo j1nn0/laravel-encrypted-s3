@@ -40,6 +40,12 @@ final class InMemoryAws
 
     private ?string $kmsErrorMessage = null;
 
+    private ?string $s3ErrorCommand = null;
+
+    private ?string $s3ErrorCode = null;
+
+    private ?string $s3ErrorMessage = null;
+
     private bool $aclDisabled = false;
 
     public function s3Handler(): callable
@@ -60,6 +66,13 @@ final class InMemoryAws
     {
         $this->kmsErrorCode = $errorCode;
         $this->kmsErrorMessage = $message;
+    }
+
+    public function failS3With(string $command, string $errorCode, string $message = 'S3 request failed.'): void
+    {
+        $this->s3ErrorCommand = $command;
+        $this->s3ErrorCode = $errorCode;
+        $this->s3ErrorMessage = $message;
     }
 
     public function disableAcls(): void
@@ -111,6 +124,19 @@ final class InMemoryAws
             'headers' => $requestHeaders,
             'body' => $requestBody,
         ];
+
+        if ($this->s3ErrorCommand === $command->getName() && $this->s3ErrorCode !== null) {
+            $errorCode = $this->s3ErrorCode;
+            $errorMessage = $this->s3ErrorMessage ?? 'S3 request failed.';
+            $this->s3ErrorCommand = null;
+            $this->s3ErrorCode = null;
+            $this->s3ErrorMessage = null;
+
+            throw new S3Exception($errorMessage, $command, [
+                'code' => $errorCode,
+                'response' => new Response(400),
+            ]);
+        }
 
         return match ($command->getName()) {
             'PutObject' => $this->putObject($command, $key, $requestBody, $requestHeaders),

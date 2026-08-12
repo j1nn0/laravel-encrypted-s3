@@ -136,6 +136,11 @@ These are the point of the package. Several are enforced in more than one place;
   caller-supplied `handler`/`http_handler`, so a type-only carve-out would let an SDK-side throwable
   bypass redaction. PHP stack-trace arguments are outside this boundary and can contain caller
   arguments such as plaintext; read and read-stream failures remain wrapped and redacted.
+  `copy()` and `move()` share one redaction point: the private `copyObject()` reduces every copy
+  failure to a safe reason carried by `Exceptions\CopyFailedException`, which the two public methods
+  wrap as `UnableToCopyFile` or `UnableToMoveFile`. That is why `move()` reports the same actionable
+  reason as `copy()` — `League\Flysystem\UnableToCopyFile::because()` keeps no previous exception, so
+  re-reducing it in `move()` would discard the reason entirely.
 
 ## Testing approach
 
