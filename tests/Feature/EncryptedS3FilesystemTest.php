@@ -54,7 +54,7 @@ final class EncryptedS3FilesystemTest extends TestCase
         $plain = 'do-not-return-this-plaintext';
         Storage::disk()->put('tampered.txt', $plain);
         $ciphertext = $this->aws->objects['tampered.txt']['body'];
-        $ciphertext[0] = chr(ord($ciphertext[0]) ^ 1);
+        $ciphertext[0] = $ciphertext[0] ^ "\x01";
         $this->aws->objects['tampered.txt']['body'] = $ciphertext;
 
         try {
