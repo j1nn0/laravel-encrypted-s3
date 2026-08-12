@@ -1,5 +1,7 @@
 # ADR 0004: Omit default ACLs on encrypted writes
 
+Status: Superseded by [ADR 0008: No implicit ACLs on package-owned writes and copies](0008-no-implicit-acls-on-package-owned-writes-and-copies.md).
+
 `EncryptedS3DiskFactory::make()` does not inject a default `ACL` into encrypted
 put options. `Support\EncryptedS3Arguments::forPut()` adds an ACL only when a
 disk or per-call Flysystem `Config` contains a non-empty `visibility` string.
@@ -19,10 +21,7 @@ This deliberately diverges from stock Laravel plus Flysystem. The upstream
 `s3` disk therefore also fails on ACL-disabled buckets. Only the encrypted
 crypto path changes its default here.
 
-Delegated, non-encrypted operations retain upstream behavior. The wrapped
-adapter's `createDirectory()`, `copy()`, and `setVisibility()` send ACLs and
-fail with `AccessControlListNotSupported` on ACL-disabled buckets; `move()`
-inherits the `copy()` limitation. `visibility()` reads `GetObjectAcl` and
-continues to work because AWS returns the owner's full-control grant. Removing
-these delegated ACLs would require reimplementing the upstream adapter, so it
-is intentionally out of scope.
+The final scope decision in this ADR is superseded by ADR 0008. The package now
+owns the `createDirectory()`, `copy()`, and `move()` paths so they follow the
+no-implicit-ACL rule; `setVisibility()` remains delegated because it is an
+explicit ACL operation.

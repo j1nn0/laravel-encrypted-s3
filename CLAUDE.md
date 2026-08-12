@@ -39,11 +39,13 @@ Four layers, wired top-down by `EncryptedS3DiskFactory::make()`:
    `docs/adr/0004-omit-default-acl-on-encrypted-writes.md` supersedes
    `docs/adr/0002-default-acl-injection.md`.
 3. `Flysystem\EncryptedS3Adapter` — the split point. `read`/`readStream`/`write`/`writeStream` go
-   through `S3EncryptionClientV3`; **everything else delegates to a wrapped `AwsS3V3Adapter`**
-   (`$this->inner`). That is why `fileSize()` reports ciphertext size and `mimeType()` reports
-   unencrypted S3 metadata. The adapter itself builds no request arguments — it holds three
-   constructor arguments (`S3EncryptionClientV3`, `AwsS3V3Adapter`, `EncryptedS3Arguments`) and
-   routes.
+   through `S3EncryptionClientV3`. `createDirectory()` reuses the encrypted put path for a
+   trailing-slash marker; `copy()` uses the raw `S3Client`'s server-side `copy()` path with
+   `MetadataDirective = COPY`; and `move()` performs copy followed by delete. The remaining
+   operations delegate to a wrapped `AwsS3V3Adapter` (`$this->inner`). That is why `fileSize()`
+   reports ciphertext size and `mimeType()` reports unencrypted S3 metadata. The adapter itself
+   builds no request arguments — it holds four constructor arguments (`S3EncryptionClientV3`,
+   `S3ClientInterface`, `AwsS3V3Adapter`, `EncryptedS3Arguments`) and routes.
 4. `Filesystem\EncryptedS3Filesystem` — extends Laravel's `FilesystemAdapter` to make
    `url`/`temporaryUrl`/`temporaryUploadUrl` throw `UnsupportedOperationException`, report
    `providesTemporary*Urls() === false`, and override `response()` to measure `Content-Length`
@@ -57,7 +59,9 @@ delegated adapter constructs its own `PathPrefixer`, `ObjectLocation` keeps a se
 encrypted keys; `docs/adr/0003-object-location-does-not-build-the-delegated-adapter.md` records why
 the two are not collapsed. `EncryptedS3Arguments` is the single place SDK request arguments are built:
 `forPut()` and `forGet()` share one private `commonArguments()`, so the six arguments both requests
-need — including the `@MetadataStrategy` pin — are written once.
+need — including the `@MetadataStrategy` pin — are written once. `forCopy()` builds the source and
+destination keys, pins `MetadataDirective` to `COPY`, and uses `optionsForConfig()` for the same
+explicit ACL resolution as `forPut()`.
 
 `Support\EncryptionOptions` is the config value object; it validates in the constructor so an
 invalid commitment policy, security profile, or encryption context can never reach the SDK.
@@ -78,6 +82,16 @@ These are the point of the package. Several are enforced in more than one place;
 - **No unencrypted fallback anywhere.** `kms.key_id` is required; decryption failures surface as
   `UnableToReadFile` and never return ciphertext or an unencrypted object as plaintext.
 - **No presigned URLs**, GET or PUT — either would bypass client-side crypto in one direction.
+- **No implicit ACLs on package-owned writes and copies.** `EncryptedS3Arguments::optionsForConfig()`
+  resolves only explicitly configured disk/per-call `visibility` or `ACL` values (and
+  `directory_visibility` is applied only when explicitly supplied for `createDirectory()`). The
+  encrypted put path and directory markers omit an ACL otherwise. `forCopy()` passes `null` to the
+  raw S3 client's ACL parameter otherwise; the AWS REST serializer skips that header. `copy()` and
+  `move()` do not retain source visibility or issue `GetObjectAcl`. `setVisibility()` remains a
+  delegated, explicitly requested ACL operation.
+- **Copy metadata is pinned to `COPY`.** `EncryptedS3Arguments::forCopy()` rejects an explicit
+  `MetadataDirective` other than `COPY`, especially `REPLACE`, because replacing metadata would
+  remove the CSE V3 envelope and make the destination unreadable.
 - **Reserved and incompatible put options.** `Metadata`, `Body`, `Bucket`, `Key`, and any
   `@`-prefixed key are reserved. `PutOptions::isReserved()` is the single definition of that rule.
   `ContentLength`, `MetadataDirective`, `CopySourceSSECustomerAlgorithm`,

@@ -82,13 +82,19 @@ client inherits both from the disk when they are not set under `kms`. A
 `credentials` array takes precedence over `key`, `secret`, and `token` at the
 same level.
 
-`root` is an S3 key prefix. Encrypted writes send no ACL unless the user asks
-for one through `visibility` or an explicit `ACL` PutObject option. Per-call
-Flysystem `Config` options override the disk-level `options` array. If both are
-set, `visibility` is applied afterwards and wins over an explicit `ACL`.
+`root` is an S3 key prefix. Encrypted writes, directory markers, and server-side
+copies send no canned ACL unless the user asks for one through `visibility`,
+`directory_visibility` for `makeDirectory()`, or an explicit `ACL` option.
+Per-call Flysystem `Config` options override the disk-level `options` array. If
+both are set, `visibility` is applied afterwards and wins over an explicit
+`ACL`. `copy` and `move` do not retain source visibility and do not issue
+`GetObjectAcl`; an explicit `MetadataDirective` other than `COPY` is rejected
+so the CSE envelope metadata cannot be discarded.
 `options['ACL']` is the route for canned ACLs that Flysystem visibility cannot
-express, such as `bucket-owner-full-control`, which is accepted by ACL-disabled
-buckets. `throw` retains Laravel's normal filesystem exception behavior.
+express, such as `bucket-owner-full-control`. Explicit ACLs can fail on
+ACL-disabled buckets, so omit them when using Object Ownership
+`BucketOwnerEnforced`. `throw` retains Laravel's normal filesystem exception
+behavior.
 `options` is filtered to this package's CSE-compatible `PutObject` allowlist:
 `ACL`, `CacheControl`, `ContentDisposition`, `ContentEncoding`, `ContentType`,
 `Expires`, `GrantFullControl`, `GrantRead`, `GrantReadACP`, `GrantWriteACP`,
@@ -112,12 +118,16 @@ the SDK does not validate it and reported S3 responses reject it with `InvalidRe
 both configuration validation and final request assembly reject it early.
 Grant options remain valid on their own.
 
-The encrypted read and write paths omit a default ACL, but delegated operations
-keep the upstream Flysystem S3 behavior. `visibility()` reads the object ACL
-and works on ACL-disabled buckets because AWS returns the owner's full-control
-grant. `createDirectory()`, `copy()`, `move()` (which copies), and
-`setVisibility()` send ACL requests and fail with
-`AccessControlListNotSupported` when ACLs are disabled on the bucket.
+The package sends a canned `x-amz-acl` only when the user explicitly requests
+one through `visibility`, `directory_visibility`, or `options['ACL']`. Explicit
+grant options are likewise sent only when configured. `makeDirectory()` writes
+an encrypted trailing-slash marker through the CSE put path and makes one KMS
+`GenerateDataKey` call per marker. `copy()` and `move()` use server-side S3
+copy without retaining source visibility; `MetadataDirective` is pinned to
+`COPY`, and an explicit `REPLACE` is rejected. `visibility()` reads the object
+ACL and works on ACL-disabled buckets because AWS returns the owner's
+full-control grant. `setVisibility()` remains an explicit ACL operation and
+can fail with `AccessControlListNotSupported` when ACLs are disabled.
 
 `kms.key_id` is required; there is no unencrypted fallback. The KMS region
 defaults to the disk region, and KMS credentials default to the disk
@@ -151,9 +161,10 @@ The application credentials need, at minimum:
 - `s3:ListBucket`
 - `s3:GetObjectAcl` and `s3:PutObjectAcl` (for visibility operations)
 
-`HeadObject` uses the `s3:GetObject` permission. S3 server-side `copy` and
-`move` use `s3:GetObject` on the source and `s3:PutObject` on the destination;
-there is no separate `s3:CopyObject` IAM action.
+The SDK's server-side `copy` and `move` use `HeadObject` first to select the
+copy strategy; `HeadObject` uses the `s3:GetObject` permission. They then use
+`s3:GetObject` on the source and `s3:PutObject` on the destination; there is no
+separate `s3:CopyObject` IAM action.
 
 Restrict the S3 resource to the configured bucket and prefix, and restrict the
 KMS resource to the intended key whenever possible.
@@ -182,9 +193,9 @@ implementation is not streaming internally.
 | `download` / `response` / `serve` | Supported with constraints | Streams decrypted plaintext. `Content-Length` is measured from the authenticated decrypted stream, and `download()` and `serve()` route through `response()`; the same stream is measured and sent, so one S3 GET serves a response. |
 | `exists` / `fileExists` / `directoryExists` | Fully supported | Unrelated to encryption. |
 | `delete` / `deleteDirectory` | Fully supported | Unrelated to encryption. |
-| `makeDirectory` / `createDirectory` | Supported with constraints | Delegated to Flysystem's S3 adapter, which sends an ACL and fails with `AccessControlListNotSupported` when bucket ACLs are disabled. |
-| `copy` | Supported with constraints | S3 server-side copy preserves the encryption envelope, so the copy remains readable. It is not re-encrypted; the original KMS encryption context is retained. The delegated adapter sends an ACL and fails when bucket ACLs are disabled. |
-| `move` | Supported with constraints | Copy followed by delete, with the same ACL constraint as `copy`. |
+| `makeDirectory` / `createDirectory` | Supported with constraints | Writes a CSE-encrypted trailing-slash marker through the put path. It sends no ACL by default, makes one KMS `GenerateDataKey` call, and accepts an explicitly configured `visibility` or `directory_visibility`. |
+| `copy` | Supported with constraints | Uses SDK server-side copy, preserving the encryption envelope and original KMS encryption context without re-encryption. It sends no ACL or `GetObjectAcl` request unless an ACL is explicitly requested; `MetadataDirective` is fixed to `COPY`, and `REPLACE` is rejected. |
+| `move` | Supported with constraints | Copy followed by delete. The source is deleted only after the copy succeeds, with the same envelope, ACL, and metadata-directive rules as `copy`. |
 | `size` | Supported with constraints | Returns ciphertext size, including the 16-byte GCM tag, not plaintext size. |
 | `mimeType` | Supported with constraints | Returns the plaintext MIME type detected or supplied at write time. The MIME type is exposed as unencrypted S3 metadata. |
 | `lastModified` | Fully supported | Unrelated to encryption. |
@@ -233,6 +244,13 @@ implementation is not streaming internally.
   the associated memory and network cost.
 - MIME type, object key names, and object size are not encrypted.
 - `copy` and `move` preserve the existing envelope and do not re-encrypt.
+- `makeDirectory()` stores its marker with a CSE V3 envelope and performs one
+  KMS `GenerateDataKey` call per invocation.
+- `copy()` rejects `MetadataDirective=REPLACE`; the directive is pinned to
+  `COPY` so the CSE envelope metadata remains attached to the copied object.
+- Package-owned writes and copies omit an implicit canned ACL. Only an explicit
+  ACL request is sent; `setVisibility()` is intentionally an explicit ACL
+  operation.
 - This package stores encryption envelopes only in S3 object metadata and never
   reads instruction files. This intentionally removes the instruction-file
   attack surface for GHSA-x8cp-jf6f-r4xh (CVE-2025-14761, Invisible Salamanders
