@@ -21,6 +21,30 @@ final class MotoIntegrationTest extends TestCase
         self::assertSame($plain, Storage::disk()->get('round-trip.txt'));
     }
 
+    public function test_download_returns_the_plaintext_length_and_body_over_http(): void
+    {
+        $key = 'download-binary.dat';
+        $plain = "\x00\xff\x01\xfe".str_repeat("\xa5\x5a", 2048)."\x00\x80\xff";
+        $disk = Storage::disk();
+
+        $disk->put($key, $plain);
+
+        $size = $disk->size($key);
+        self::assertNotSame(strlen($plain), $size);
+
+        $response = $disk->download($key, 'download-binary.dat');
+        $contentLength = $response->headers->get('Content-Length');
+        self::assertNotNull($contentLength);
+        self::assertSame((string) strlen($plain), $contentLength);
+        self::assertNotSame((string) $size, $contentLength);
+
+        ob_start();
+        $response->sendContent();
+        $body = ob_get_clean();
+
+        self::assertSame($plain, $body);
+    }
+
     public function test_ciphertext_at_rest_is_not_plaintext_over_http(): void
     {
         $plain = 'plaintext must not appear in the raw S3 object';
