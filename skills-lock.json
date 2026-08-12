@@ -5,19 +5,19 @@
       "source": "j1nn0/skills",
       "sourceType": "github",
       "skillPath": "skills/agent-orchestration/SKILL.md",
-      "computedHash": "c9daa2d263fe91570666a56f1893e8561885e52e588d6a95081a872d174d8c59"
+      "computedHash": "827f37c65c4c46a1d4e2c360582c261c1b1610bd07b612974107501b2a198891"
     },
     "laravel-patterns": {
       "source": "affaan-m/ecc",
       "sourceType": "github",
       "skillPath": "skills/laravel-patterns/SKILL.md",
-      "computedHash": "baf54bb931610e753b3c67bebdc333ae1d344a5fe0babcfc60746e9df1c43c5e"
+      "computedHash": "58d3d0c9c98dff80c4a4e0d28e7b3ddf8cbb2b941338a4d3780aff53f52f146e"
     },
     "laravel-verification": {
       "source": "affaan-m/ecc",
       "sourceType": "github",
       "skillPath": "skills/laravel-verification/SKILL.md",
-      "computedHash": "f8b71c1f60d295e1a38545c65a491eb612337d6c3fcaf3f87b364e25b4160a34"
+      "computedHash": "a5a1c2fdb15fbfa05f78cdb8368a62b6b405c5d44eb56e93e637acf446d3f1a1"
     },
     "securing-s3-buckets": {
       "source": "aws/agent-toolkit-for-aws",
