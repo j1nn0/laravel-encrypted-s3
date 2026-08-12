@@ -137,4 +137,81 @@ final class MotoIntegrationTest extends TestCase
 
         self::assertSame($plain, $contents);
     }
+
+    public function test_copy_preserves_the_envelope_and_remains_readable_over_http(): void
+    {
+        $source = 'copy-source.txt';
+        $destination = 'copy-destination.txt';
+        $plain = 'copyable plaintext over Moto HTTP';
+
+        Storage::disk()->put($source, $plain);
+        $sourceEnvelope = $this->envelopeMetadata($source);
+
+        self::assertTrue(Storage::disk()->copy($source, $destination));
+        self::assertSame($plain, Storage::disk()->get($destination));
+        self::assertSame($sourceEnvelope, $this->envelopeMetadata($destination));
+    }
+
+    public function test_copy_handles_spaces_and_plus_in_object_keys_over_http(): void
+    {
+        $source = 'folder/source file+1.txt';
+        $destination = 'folder/copied file+1.txt';
+        $plain = 'CopySource encoding must preserve plus signs.';
+
+        Storage::disk()->put($source, $plain);
+
+        self::assertTrue(Storage::disk()->copy($source, $destination));
+        self::assertSame($plain, Storage::disk()->get($destination));
+    }
+
+    public function test_move_copies_readably_and_deletes_the_source_over_http(): void
+    {
+        $source = 'move-source.txt';
+        $destination = 'move-destination.txt';
+        $plain = 'movable plaintext over Moto HTTP';
+
+        Storage::disk()->put($source, $plain);
+
+        self::assertTrue(Storage::disk()->move($source, $destination));
+        self::assertFalse(Storage::disk()->exists($source));
+        self::assertSame($plain, Storage::disk()->get($destination));
+    }
+
+    public function test_make_directory_writes_an_encrypted_marker_over_http(): void
+    {
+        $directory = 'http-directory';
+        $disk = Storage::disk();
+
+        self::assertTrue($disk->makeDirectory($directory));
+        self::assertTrue($disk->directoryExists($directory));
+        self::assertNotEmpty($this->envelopeMetadata($directory.'/'));
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function envelopeMetadata(string $key): array
+    {
+        $raw = $this->s3->getObject([
+            'Bucket' => $this->bucket,
+            'Key' => $key,
+        ]);
+        $metadata = $raw['Metadata'] ?? null;
+        self::assertIsArray($metadata);
+
+        $envelope = [];
+
+        foreach (MetadataEnvelope::getV3Fields() as $field) {
+            if (! is_string($field)) {
+                throw new RuntimeException('AWS SDK returned an invalid V3 metadata field.');
+            }
+
+            self::assertArrayHasKey($field, $metadata);
+            $value = $metadata[$field];
+            self::assertIsString($value);
+            $envelope[$field] = $value;
+        }
+
+        return $envelope;
+    }
 }
