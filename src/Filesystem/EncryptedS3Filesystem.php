@@ -36,6 +36,7 @@ final class EncryptedS3Filesystem extends FilesystemAdapter
 
         if (! array_key_exists('Content-Disposition', $headers)) {
             $filename = $name ?? basename($path);
+            $disposition ??= 'inline';
 
             $disposition = $response->headers->makeDisposition(
                 $disposition, $filename, $this->fallbackName($filename)

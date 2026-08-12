@@ -24,6 +24,8 @@ Encryption V3. Cryptography is delegated to the AWS SDK.
 - `size()` returns the stored ciphertext size, not the plaintext size.
 - Unknown keys under the `encryption` and `kms` configuration blocks are
   rejected at disk-construction time.
+- Non-string top-level disk configuration keys are rejected at
+  disk-construction time instead of being passed through to Flysystem.
 
 ### Security
 

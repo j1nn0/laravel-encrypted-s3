@@ -46,10 +46,11 @@ final class DiskConfiguration
     ) {}
 
     /**
-     * @param  array<string, mixed>  $config
+     * @param  array<mixed, mixed>  $config
      */
     public static function fromArray(array $config): self
     {
+        $config = self::assertStringConfigKeys($config);
         $bucket = self::requiredString($config, 'bucket', 'The encrypted S3 bucket is required.');
         $region = self::requiredString($config, 'region', 'The encrypted S3 region is required.');
         $encryptionConfig = $config['encryption'] ?? [];
@@ -63,7 +64,7 @@ final class DiskConfiguration
             throw new InvalidConfigurationException('The KMS configuration must be an array.');
         }
 
-        self::assertKnownKmsConfigKeys($kmsConfig);
+        $kmsConfig = self::assertKnownKmsConfigKeys($kmsConfig);
 
         $kmsKeyId = $kmsConfig['key_id'] ?? null;
 
@@ -89,16 +90,44 @@ final class DiskConfiguration
 
     /**
      * @param  array<mixed, mixed>  $config
+     * @return array<string, mixed>
      */
-    private static function assertKnownKmsConfigKeys(array $config): void
+    private static function assertStringConfigKeys(array $config): array
     {
-        foreach (array_keys($config) as $key) {
+        $validated = [];
+
+        foreach ($config as $key => $value) {
+            if (! is_string($key)) {
+                throw new InvalidConfigurationException(
+                    "The disk configuration key {$key} must be a string.",
+                );
+            }
+
+            $validated[$key] = $value;
+        }
+
+        return $validated;
+    }
+
+    /**
+     * @param  array<mixed, mixed>  $config
+     * @return array<string, mixed>
+     */
+    private static function assertKnownKmsConfigKeys(array $config): array
+    {
+        $validated = [];
+
+        foreach ($config as $key => $value) {
             if (! is_string($key) || ! in_array($key, self::KMS_CONFIG_KEYS, true)) {
                 throw new InvalidConfigurationException(
                     "The KMS option {$key} is not supported.",
                 );
             }
+
+            $validated[$key] = $value;
         }
+
+        return $validated;
     }
 
     public function bucket(): string

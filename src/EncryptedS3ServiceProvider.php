@@ -14,7 +14,7 @@ final class EncryptedS3ServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        Storage::extend('encrypted-s3', function ($app, array $config): EncryptedS3Filesystem {
+        Storage::extend('encrypted-s3', function (mixed $app, array $config): EncryptedS3Filesystem {
             return (new EncryptedS3DiskFactory)->make($config);
         });
     }

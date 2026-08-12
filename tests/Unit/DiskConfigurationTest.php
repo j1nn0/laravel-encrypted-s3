@@ -7,6 +7,7 @@ namespace J1nn0\EncryptedS3\Tests\Unit;
 use J1nn0\EncryptedS3\Exceptions\InvalidConfigurationException;
 use J1nn0\EncryptedS3\Support\DiskConfiguration;
 use J1nn0\EncryptedS3\Support\EncryptionOptions;
+use LogicException;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
@@ -91,6 +92,14 @@ final class DiskConfigurationTest extends TestCase
         DiskConfiguration::fromArray(self::configWith(['kms' => 'invalid']));
     }
 
+    public function test_from_array_rejects_a_non_string_top_level_config_key(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('The disk configuration key 0 must be a string.');
+
+        DiskConfiguration::fromArray(array_merge(['invalid'], self::validConfig()));
+    }
+
     public function test_from_array_rejects_unknown_encryption_options(): void
     {
         $this->expectException(InvalidConfigurationException::class);
@@ -133,10 +142,10 @@ final class DiskConfigurationTest extends TestCase
                 'credentials' => ['key' => 'credentials-key', 'secret' => 'credentials-secret'],
                 'endpoint' => 'http://kms.test',
                 'handler' => static function (): never {
-                    throw new \LogicException('not called');
+                    throw new LogicException('not called');
                 },
                 'http_handler' => static function (): never {
-                    throw new \LogicException('not called');
+                    throw new LogicException('not called');
                 },
                 'debug' => false,
                 'retries' => ['max_attempts' => 1],
@@ -215,7 +224,18 @@ final class DiskConfigurationTest extends TestCase
      */
     private static function configWith(array $overrides): array
     {
-        return array_replace_recursive(self::validConfig(), $overrides);
+        $config = array_replace_recursive(self::validConfig(), $overrides);
+        $validated = [];
+
+        foreach ($config as $key => $value) {
+            if (! is_string($key)) {
+                throw new LogicException('The test configuration must have string keys.');
+            }
+
+            $validated[$key] = $value;
+        }
+
+        return $validated;
     }
 
     /**
