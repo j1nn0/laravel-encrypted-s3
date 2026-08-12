@@ -7,6 +7,7 @@ namespace J1nn0\EncryptedS3\Tests\Unit;
 use J1nn0\EncryptedS3\Exceptions\InvalidConfigurationException;
 use J1nn0\EncryptedS3\Support\AwsClientSettings;
 use J1nn0\EncryptedS3\Support\DiskConfiguration;
+use LogicException;
 use PHPUnit\Framework\TestCase;
 use stdClass;
 
@@ -175,7 +176,16 @@ final class AwsClientSettingsTest extends TestCase
      */
     private function settings(array $overrides = []): AwsClientSettings
     {
-        $config = array_replace_recursive(self::validConfig(), $overrides);
+        $merged = array_replace_recursive(self::validConfig(), $overrides);
+        $config = [];
+
+        foreach ($merged as $key => $value) {
+            if (! is_string($key)) {
+                throw new LogicException('The test configuration must have string keys.');
+            }
+
+            $config[$key] = $value;
+        }
 
         return new AwsClientSettings(DiskConfiguration::fromArray($config));
     }

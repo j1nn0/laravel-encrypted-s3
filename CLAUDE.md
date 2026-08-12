@@ -18,7 +18,7 @@ vendor/bin/phpunit --filter test_put_and_get_round_trip_plaintext   # single tes
 vendor/bin/phpunit tests/Feature/EncryptedS3FilesystemTest.php      # single file
 composer lint                                   # Pint (laravel preset) in --test mode
 vendor/bin/pint                                 # apply style fixes
-composer analyse                                # PHPStan with Larastan, level 6 over src + tests
+composer analyse                                # PHPStan with Larastan, level 10 over src + tests
 ```
 
 PHPUnit runs with `failOnRisky` and `failOnWarning` — an E_USER_WARNING from the AWS SDK fails the
@@ -39,14 +39,18 @@ Four layers, wired top-down by `EncryptedS3DiskFactory::make()`:
    `docs/adr/0004-omit-default-acl-on-encrypted-writes.md` supersedes
    `docs/adr/0002-default-acl-injection.md`.
 3. `Flysystem\EncryptedS3Adapter` — the split point. `read`/`readStream`/`write`/`writeStream` go
-   through `S3EncryptionClientV3`; **everything else delegates to a wrapped `AwsS3V3Adapter`**
-   (`$this->inner`). That is why `fileSize()` reports ciphertext size and `mimeType()` reports
-   unencrypted S3 metadata. The adapter itself builds no request arguments — it holds three
-   constructor arguments (`S3EncryptionClientV3`, `AwsS3V3Adapter`, `EncryptedS3Arguments`) and
-   routes.
-4. `Filesystem\EncryptedS3Filesystem` — extends Laravel's `FilesystemAdapter` only to make
-   `url`/`temporaryUrl`/`temporaryUploadUrl` throw `UnsupportedOperationException` and report
-   `providesTemporary*Urls() === false`.
+   through `S3EncryptionClientV3`. `createDirectory()` reuses the encrypted put path for a
+   trailing-slash marker; `copy()` uses the raw `S3Client`'s server-side `copy()` path with
+   `MetadataDirective = COPY`; and `move()` performs copy followed by delete. The remaining
+   operations delegate to a wrapped `AwsS3V3Adapter` (`$this->inner`). That is why `fileSize()`
+   reports ciphertext size and `mimeType()` reports unencrypted S3 metadata. The adapter itself
+   builds no request arguments — it holds four constructor arguments (`S3EncryptionClientV3`,
+   `S3ClientInterface`, `AwsS3V3Adapter`, `EncryptedS3Arguments`) and routes.
+4. `Filesystem\EncryptedS3Filesystem` — extends Laravel's `FilesystemAdapter` to make
+   `url`/`temporaryUrl`/`temporaryUploadUrl` throw `UnsupportedOperationException`, report
+   `providesTemporary*Urls() === false`, and override `response()` to measure `Content-Length`
+   from the eagerly opened decrypted stream before streaming that same handle. Laravel's
+   `download()` and `serve()` route through this override.
 
 `Support\ObjectLocation` (`@internal`) owns the bucket and raw root in one place. The delegated
 adapter receives `bucket()` and `root()` from it, while `Support\EncryptedS3Arguments` uses its
@@ -55,7 +59,10 @@ delegated adapter constructs its own `PathPrefixer`, `ObjectLocation` keeps a se
 encrypted keys; `docs/adr/0003-object-location-does-not-build-the-delegated-adapter.md` records why
 the two are not collapsed. `EncryptedS3Arguments` is the single place SDK request arguments are built:
 `forPut()` and `forGet()` share one private `commonArguments()`, so the six arguments both requests
-need — including the `@MetadataStrategy` pin — are written once.
+need — including the `@MetadataStrategy` pin — are written once. `forCopy()` builds the source and
+destination keys, pins `MetadataDirective` to `COPY`, and uses `optionsForConfig()` for the same
+explicit ACL resolution as `forPut()`. Its `assertCopySourceIsEncrypted()` method is a pure
+metadata check using the AWS SDK's `MetadataEnvelope` field definitions.
 
 `Support\EncryptionOptions` is the config value object; it validates in the constructor so an
 invalid commitment policy, security profile, or encryption context can never reach the SDK.
@@ -72,10 +79,29 @@ These are the point of the package. Several are enforced in more than one place;
   neither may be dropped.
 - **`FORBID_ENCRYPT_ALLOW_DECRYPT` and `V3_AND_LEGACY` are rejected** in `EncryptionOptions`, with
   the security rationale in the exception message. Only `REQUIRE_ENCRYPT_*` policies and profile
-  `V3` are accepted. The `aws/aws-sdk-php: ^3.368` lower bound is the patched advisory version.
+  `V3` are accepted. The `aws/aws-sdk-php: ^3.382.2` lower bound includes the 3.368 fix for
+  GHSA-x8cp-jf6f-r4xh (CVE-2025-14761) and is required because 3.382.2 first makes the REST
+  serializer omit headers whose generated value is null, which is needed for copy ACL omission.
 - **No unencrypted fallback anywhere.** `kms.key_id` is required; decryption failures surface as
   `UnableToReadFile` and never return ciphertext or an unencrypted object as plaintext.
 - **No presigned URLs**, GET or PUT — either would bypass client-side crypto in one direction.
+- **No implicit ACLs on package-owned writes and copies.** `EncryptedS3Arguments::optionsForConfig()`
+  resolves only explicitly configured disk/per-call `visibility` or `ACL` values (and
+  `directory_visibility` is applied only when explicitly supplied for `createDirectory()`). The
+  encrypted put path and directory markers omit an ACL otherwise. `forCopy()` passes `null` to the
+  raw S3 client's ACL parameter otherwise; the AWS REST serializer skips that header. `copy()` and
+  `move()` do not retain source visibility or issue `GetObjectAcl`. `setVisibility()` remains a
+  delegated, explicitly requested ACL operation.
+- **Copy metadata is pinned to `COPY`.** `EncryptedS3Arguments::forCopy()` rejects an explicit
+  `MetadataDirective` other than `COPY`, especially `REPLACE`, because replacing metadata would
+  remove the CSE V3 envelope and make the destination unreadable.
+- **Copy sources must be CSE V3 objects.** Before the raw server-side copy, `copy()` issues a
+  `HeadObject` and `EncryptedS3Arguments::assertCopySourceIsEncrypted()` requires every field from
+  `MetadataEnvelope::getV3Fields()` and no field from `getV2Fields()`, after defensive lower-case
+  normalization. This keeps copy validation aligned with the V3 read path's exclusive-map check;
+  plaintext, V1/V2, mixed, or incomplete sources fail closed before a destination is created.
+  The `x-amz-d` commitment value is checked for presence only; its cryptographic validity is the
+  SDK/KMS decryption responsibility, not copy validation.
 - **Reserved and incompatible put options.** `Metadata`, `Body`, `Bucket`, `Key`, and any
   `@`-prefixed key are reserved. `PutOptions::isReserved()` is the single definition of that rule.
   `ContentLength`, `MetadataDirective`, `CopySourceSSECustomerAlgorithm`,

@@ -1,0 +1,9 @@
+<?php
+
+namespace Aws;
+
+/**
+ * @implements \ArrayAccess<string, mixed>
+ * @implements \IteratorAggregate<string, mixed>
+ */
+class Result implements \ArrayAccess, \IteratorAggregate, \Countable {}

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace J1nn0\EncryptedS3\Flysystem;
 
 use Aws\S3\Crypto\S3EncryptionClientV3;
+use Aws\S3\S3ClientInterface;
 use J1nn0\EncryptedS3\Exceptions\InvalidConfigurationException;
 use J1nn0\EncryptedS3\Support\EncryptedS3Arguments;
 use J1nn0\EncryptedS3\Support\SafeFailureReason;
@@ -12,6 +13,9 @@ use League\Flysystem\AwsS3V3\AwsS3V3Adapter;
 use League\Flysystem\Config;
 use League\Flysystem\FileAttributes;
 use League\Flysystem\FilesystemAdapter;
+use League\Flysystem\UnableToCopyFile;
+use League\Flysystem\UnableToCreateDirectory;
+use League\Flysystem\UnableToMoveFile;
 use League\Flysystem\UnableToReadFile;
 use League\Flysystem\UnableToWriteFile;
 use Psr\Http\Message\StreamInterface;
@@ -25,6 +29,7 @@ final class EncryptedS3Adapter implements FilesystemAdapter
 {
     public function __construct(
         private readonly S3EncryptionClientV3 $encryptionClient,
+        private readonly S3ClientInterface $s3Client,
         private readonly AwsS3V3Adapter $inner,
         private readonly EncryptedS3Arguments $arguments,
     ) {}
@@ -56,8 +61,14 @@ final class EncryptedS3Adapter implements FilesystemAdapter
     {
         try {
             $result = $this->encryptionClient->getObject($this->arguments->forGet($path));
+            $body = $result['Body'];
 
-            return (string) $result['Body'];
+            if (! $body instanceof StreamInterface) {
+                // A malformed response must fail closed instead of becoming an empty string.
+                throw new RuntimeException('The encrypted response body is not a stream.');
+            }
+
+            return (string) $body;
         } catch (Throwable $exception) {
             throw UnableToReadFile::fromLocation($path, SafeFailureReason::from($exception), $exception);
         }
@@ -97,7 +108,24 @@ final class EncryptedS3Adapter implements FilesystemAdapter
 
     public function createDirectory(string $path, Config $config): void
     {
-        $this->inner->createDirectory($path, $config);
+        $configuredVisibility = $config->get(Config::OPTION_VISIBILITY);
+
+        if (! is_string($configuredVisibility) || $configuredVisibility === '') {
+            $directoryVisibility = $config->get(Config::OPTION_DIRECTORY_VISIBILITY);
+
+            if (is_string($directoryVisibility) && $directoryVisibility !== '') {
+                // Explicit visibility wins when both are set, matching forPut()'s existing precedence.
+                $config = $config->withSetting(Config::OPTION_VISIBILITY, $directoryVisibility);
+            }
+        }
+
+        try {
+            $this->put(rtrim($path, '/').'/', '', $config);
+        } catch (InvalidConfigurationException $exception) {
+            throw $exception;
+        } catch (UnableToWriteFile $exception) {
+            throw UnableToCreateDirectory::atLocation($path, $exception->reason(), $exception);
+        }
     }
 
     public function setVisibility(string $path, string $visibility): void
@@ -132,12 +160,84 @@ final class EncryptedS3Adapter implements FilesystemAdapter
 
     public function move(string $source, string $destination, Config $config): void
     {
-        $this->inner->move($source, $destination, $config);
+        if ($source === $destination) {
+            return;
+        }
+
+        try {
+            $this->copy($source, $destination, $config);
+            $this->delete($source);
+        } catch (InvalidConfigurationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            throw UnableToMoveFile::because(
+                SafeFailureReason::from($exception),
+                $source,
+                $destination,
+            );
+        }
     }
 
+    /**
+     * @throws InvalidConfigurationException
+     */
     public function copy(string $source, string $destination, Config $config): void
     {
-        $this->inner->copy($source, $destination, $config);
+        if ($source === $destination) {
+            return;
+        }
+
+        try {
+            $arguments = $this->arguments->forCopy($source, $destination, $config);
+        } catch (InvalidConfigurationException $exception) {
+            throw $exception;
+        } catch (Throwable $exception) {
+            throw UnableToCopyFile::because(
+                SafeFailureReason::from($exception),
+                $source,
+                $destination,
+            );
+        }
+
+        try {
+            $head = $this->s3Client->headObject([
+                'Bucket' => $arguments['sourceBucket'],
+                'Key' => $arguments['sourceKey'],
+            ]);
+        } catch (Throwable $exception) {
+            throw UnableToCopyFile::because(
+                SafeFailureReason::from($exception),
+                $source,
+                $destination,
+            );
+        }
+
+        $metadata = $head['Metadata'] ?? [];
+
+        try {
+            $this->arguments->assertCopySourceIsEncrypted(is_array($metadata) ? $metadata : []);
+        } catch (InvalidConfigurationException $exception) {
+            throw UnableToCopyFile::because($exception->getMessage(), $source, $destination);
+        }
+
+        try {
+            $this->s3Client->copy(
+                $arguments['sourceBucket'],
+                $arguments['sourceKey'],
+                $arguments['destinationBucket'],
+                $arguments['destinationKey'],
+                // S3 skips a null ACL; its interface omits this valid case from the type.
+                // @phpstan-ignore argument.type
+                $arguments['acl'],
+                $arguments['options'],
+            );
+        } catch (Throwable $exception) {
+            throw UnableToCopyFile::because(
+                SafeFailureReason::from($exception),
+                $source,
+                $destination,
+            );
+        }
     }
 
     /**

@@ -6,7 +6,10 @@ namespace J1nn0\EncryptedS3\Tests\Integration;
 
 use Aws\Crypto\MetadataEnvelope;
 use Illuminate\Support\Facades\Storage;
+use League\Flysystem\UnableToCopyFile;
 use League\Flysystem\UnableToReadFile;
+use Psr\Http\Message\StreamInterface;
+use RuntimeException;
 
 final class MotoIntegrationTest extends TestCase
 {
@@ -19,6 +22,30 @@ final class MotoIntegrationTest extends TestCase
         self::assertSame($plain, Storage::disk()->get('round-trip.txt'));
     }
 
+    public function test_download_returns_the_plaintext_length_and_body_over_http(): void
+    {
+        $key = 'download-binary.dat';
+        $plain = "\x00\xff\x01\xfe".str_repeat("\xa5\x5a", 2048)."\x00\x80\xff";
+        $disk = Storage::disk();
+
+        $disk->put($key, $plain);
+
+        $size = $disk->size($key);
+        self::assertNotSame(strlen($plain), $size);
+
+        $response = $disk->download($key, 'download-binary.dat');
+        $contentLength = $response->headers->get('Content-Length');
+        self::assertNotNull($contentLength);
+        self::assertSame((string) strlen($plain), $contentLength);
+        self::assertNotSame((string) $size, $contentLength);
+
+        ob_start();
+        $response->sendContent();
+        $body = ob_get_clean();
+
+        self::assertSame($plain, $body);
+    }
+
     public function test_ciphertext_at_rest_is_not_plaintext_over_http(): void
     {
         $plain = 'plaintext must not appear in the raw S3 object';
@@ -29,7 +56,13 @@ final class MotoIntegrationTest extends TestCase
             'Bucket' => $this->bucket,
             'Key' => 'ciphertext.txt',
         ]);
-        $ciphertext = (string) $raw['Body'];
+        $body = $raw['Body'] ?? null;
+
+        if (! $body instanceof StreamInterface) {
+            throw new RuntimeException('Moto returned a non-stream S3 response body.');
+        }
+
+        $ciphertext = (string) $body;
 
         self::assertNotSame($plain, $ciphertext);
         self::assertStringNotContainsString($plain, $ciphertext);
@@ -104,5 +137,102 @@ final class MotoIntegrationTest extends TestCase
         fclose($readStream);
 
         self::assertSame($plain, $contents);
+    }
+
+    public function test_copy_preserves_the_envelope_and_remains_readable_over_http(): void
+    {
+        $source = 'copy-source.txt';
+        $destination = 'copy-destination.txt';
+        $plain = 'copyable plaintext over Moto HTTP';
+
+        Storage::disk()->put($source, $plain);
+        $sourceEnvelope = $this->envelopeMetadata($source);
+
+        self::assertTrue(Storage::disk()->copy($source, $destination));
+        self::assertSame($plain, Storage::disk()->get($destination));
+        self::assertSame($sourceEnvelope, $this->envelopeMetadata($destination));
+    }
+
+    public function test_copy_handles_spaces_and_plus_in_object_keys_over_http(): void
+    {
+        $source = 'folder/source file+1.txt';
+        $destination = 'folder/copied file+1.txt';
+        $plain = 'CopySource encoding must preserve plus signs.';
+
+        Storage::disk()->put($source, $plain);
+
+        self::assertTrue(Storage::disk()->copy($source, $destination));
+        self::assertSame($plain, Storage::disk()->get($destination));
+    }
+
+    public function test_copy_rejects_a_plaintext_source_over_http(): void
+    {
+        $source = 'plaintext-source.txt';
+        $destination = 'plaintext-copy.txt';
+
+        $this->s3->putObject([
+            'Bucket' => $this->bucket,
+            'Key' => $source,
+            'Body' => 'TOTALLY-PLAINTEXT-CONTENT',
+        ]);
+
+        try {
+            Storage::disk()->copy($source, $destination);
+            self::fail('The plaintext source was copied.');
+        } catch (UnableToCopyFile) {
+            self::assertFalse(Storage::disk()->exists($destination));
+        }
+
+    }
+
+    public function test_move_copies_readably_and_deletes_the_source_over_http(): void
+    {
+        $source = 'move-source.txt';
+        $destination = 'move-destination.txt';
+        $plain = 'movable plaintext over Moto HTTP';
+
+        Storage::disk()->put($source, $plain);
+
+        self::assertTrue(Storage::disk()->move($source, $destination));
+        self::assertFalse(Storage::disk()->exists($source));
+        self::assertSame($plain, Storage::disk()->get($destination));
+    }
+
+    public function test_make_directory_writes_an_encrypted_marker_over_http(): void
+    {
+        $directory = 'http-directory';
+        $disk = Storage::disk();
+
+        self::assertTrue($disk->makeDirectory($directory));
+        self::assertTrue($disk->directoryExists($directory));
+        self::assertNotEmpty($this->envelopeMetadata($directory.'/'));
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function envelopeMetadata(string $key): array
+    {
+        $raw = $this->s3->getObject([
+            'Bucket' => $this->bucket,
+            'Key' => $key,
+        ]);
+        $metadata = $raw['Metadata'] ?? null;
+        self::assertIsArray($metadata);
+
+        $envelope = [];
+
+        foreach (MetadataEnvelope::getV3Fields() as $field) {
+            if (! is_string($field)) {
+                throw new RuntimeException('AWS SDK returned an invalid V3 metadata field.');
+            }
+
+            self::assertArrayHasKey($field, $metadata);
+            $value = $metadata[$field];
+            self::assertIsString($value);
+            $envelope[$field] = $value;
+        }
+
+        return $envelope;
     }
 }

@@ -95,7 +95,6 @@ final class InMemoryAws
         return null;
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function handleS3(CommandInterface $command, RequestInterface $request): Result
     {
         $requestBody = (string) $request->getBody();
@@ -114,7 +113,7 @@ final class InMemoryAws
         ];
 
         return match ($command->getName()) {
-            'PutObject' => $this->putObject($key, $requestBody, $requestHeaders),
+            'PutObject' => $this->putObject($command, $key, $requestBody, $requestHeaders),
             'GetObject' => $this->getObject($command, $key),
             'HeadObject' => $this->headObject($command, $key),
             'DeleteObject' => $this->deleteObject($key),
@@ -130,7 +129,6 @@ final class InMemoryAws
         };
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function handleKms(CommandInterface $command, RequestInterface $request): Result
     {
         $target = $request->getHeaderLine('X-Amz-Target');
@@ -169,9 +167,14 @@ final class InMemoryAws
     /**
      * @param  array<string, string>  $headers
      */
-    // @phpstan-ignore-next-line missingType.iterableValue
-    private function putObject(string $key, string $body, array $headers): Result
-    {
+    private function putObject(
+        CommandInterface $command,
+        string $key,
+        string $body,
+        array $headers
+    ): Result {
+        $this->rejectAclHeaders($command, $headers);
+
         $this->objects[$key] = [
             'body' => $body,
             'headers' => $headers,
@@ -181,20 +184,15 @@ final class InMemoryAws
         return new Result(['ETag' => '"'.md5($body).'"']);
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function putObjectAcl(CommandInterface $command): Result
     {
         if ($this->aclDisabled) {
-            throw new S3Exception('ACLs are not supported.', $command, [
-                'code' => 'AccessControlListNotSupported',
-                'response' => new Response(400),
-            ]);
+            throw $this->aclNotSupported($command);
         }
 
         return new Result;
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function getObject(CommandInterface $command, string $key): Result
     {
         if (! isset($this->objects[$key])) {
@@ -214,7 +212,6 @@ final class InMemoryAws
         ]);
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function headObject(CommandInterface $command, string $key): Result
     {
         if (! isset($this->objects[$key])) {
@@ -232,7 +229,6 @@ final class InMemoryAws
         ]);
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function deleteObject(string $key): Result
     {
         unset($this->objects[$key]);
@@ -240,7 +236,6 @@ final class InMemoryAws
         return new Result;
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function deleteObjects(CommandInterface $command): Result
     {
         $delete = $command['Delete'] ?? [];
@@ -260,13 +255,14 @@ final class InMemoryAws
     /**
      * @param  array<string, string>  $requestHeaders
      */
-    // @phpstan-ignore-next-line missingType.iterableValue
     private function copyObject(
         CommandInterface $command,
         RequestInterface $request,
         string $destination,
         array $requestHeaders
     ): Result {
+        $this->rejectAclHeaders($command, $requestHeaders);
+
         $source = ltrim(rawurldecode($request->getHeaderLine('x-amz-copy-source')), '/');
         $separator = strpos($source, '/');
         $sourceKey = $separator === false ? '' : substr($source, $separator + 1);
@@ -291,11 +287,40 @@ final class InMemoryAws
         return new Result(['CopyObjectResult' => ['ETag' => '"'.md5($sourceObject['body']).'"']]);
     }
 
-    // @phpstan-ignore-next-line missingType.iterableValue
+    /**
+     * @param  array<string, string>  $headers
+     */
+    private function rejectAclHeaders(CommandInterface $command, array $headers): void
+    {
+        if (! $this->aclDisabled) {
+            return;
+        }
+
+        foreach ([
+            'x-amz-acl',
+            'x-amz-grant-full-control',
+            'x-amz-grant-read',
+            'x-amz-grant-read-acp',
+            'x-amz-grant-write-acp',
+        ] as $header) {
+            if (array_key_exists($header, $headers)) {
+                throw $this->aclNotSupported($command);
+            }
+        }
+    }
+
+    private function aclNotSupported(CommandInterface $command): S3Exception
+    {
+        return new S3Exception('ACLs are not supported.', $command, [
+            'code' => 'AccessControlListNotSupported',
+            'response' => new Response(400),
+        ]);
+    }
+
     private function listObjects(CommandInterface $command): Result
     {
-        $prefix = (string) ($command['Prefix'] ?? '');
-        $delimiter = (string) ($command['Delimiter'] ?? '');
+        $prefix = $this->commandString($command, 'Prefix');
+        $delimiter = $this->commandString($command, 'Delimiter');
         $contents = [];
         $commonPrefixes = [];
 
@@ -340,6 +365,21 @@ final class InMemoryAws
         }
 
         return new Result($result);
+    }
+
+    private function commandString(CommandInterface $command, string $key): string
+    {
+        $value = $command[$key] ?? null;
+
+        if ($value === null) {
+            return '';
+        }
+
+        if (! is_string($value)) {
+            throw new LogicException('InMemoryAws expected a string S3 command option.');
+        }
+
+        return $value;
     }
 
     /**

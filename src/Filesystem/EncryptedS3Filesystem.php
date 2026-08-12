@@ -6,9 +6,59 @@ namespace J1nn0\EncryptedS3\Filesystem;
 
 use Illuminate\Filesystem\FilesystemAdapter;
 use J1nn0\EncryptedS3\Exceptions\UnsupportedOperationException;
+use League\Flysystem\UnableToRetrieveMetadata;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 final class EncryptedS3Filesystem extends FilesystemAdapter
 {
+    /**
+     * Create a streamed response for a given file.
+     *
+     * @param  string  $path
+     * @param  string|null  $name
+     * @param  array<string, mixed>  $headers
+     * @param  string|null  $disposition
+     * @return StreamedResponse
+     *
+     * @throws UnableToRetrieveMetadata
+     */
+    public function response($path, $name = null, array $headers = [], $disposition = 'inline')
+    {
+        $response = new StreamedResponse;
+        $stream = $this->readStream($path);
+        $stat = is_resource($stream) ? fstat($stream) : false;
+
+        $headers['Content-Type'] ??= $this->mimeType($path);
+
+        if ($stat !== false) {
+            $headers['Content-Length'] ??= $stat['size'];
+        }
+
+        if (! array_key_exists('Content-Disposition', $headers)) {
+            $filename = $name ?? basename($path);
+            $disposition ??= 'inline';
+
+            $disposition = $response->headers->makeDisposition(
+                $disposition, $filename, $this->fallbackName($filename)
+            );
+
+            $headers['Content-Disposition'] = $disposition;
+        }
+
+        $response->headers->replace($headers);
+
+        $response->setCallback(function () use ($stream) {
+            if (! is_resource($stream)) {
+                return;
+            }
+
+            fpassthru($stream);
+            fclose($stream);
+        });
+
+        return $response;
+    }
+
     public function url($path)
     {
         throw new UnsupportedOperationException(

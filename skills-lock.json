@@ -5,7 +5,13 @@
       "source": "j1nn0/skills",
       "sourceType": "github",
       "skillPath": "skills/agent-orchestration/SKILL.md",
-      "computedHash": "827f37c65c4c46a1d4e2c360582c261c1b1610bd07b612974107501b2a198891"
+      "computedHash": "b0fc654c50c3379460430ac22a4ec159a780874ed6f07abbed38fcd0cae3e09e"
+    },
+    "continuous-improvement-loop": {
+      "source": "j1nn0/skills",
+      "sourceType": "github",
+      "skillPath": "skills/continuous-improvement-loop/SKILL.md",
+      "computedHash": "346d19968de99a33f87e1fa8080bb0205bc70004b0cf064302012e4d22cba5eb"
     },
     "laravel-patterns": {
       "source": "affaan-m/ecc",

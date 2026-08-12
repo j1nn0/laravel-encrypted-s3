@@ -14,6 +14,9 @@ use J1nn0\EncryptedS3\Exceptions\UnsupportedOperationException;
 use J1nn0\EncryptedS3\Filesystem\EncryptedS3Filesystem;
 use J1nn0\EncryptedS3\Support\EncryptionOptions;
 use J1nn0\EncryptedS3\Tests\TestCase;
+use League\Flysystem\UnableToCopyFile;
+use League\Flysystem\UnableToCreateDirectory;
+use League\Flysystem\UnableToMoveFile;
 use League\Flysystem\UnableToReadFile;
 use League\Flysystem\UnableToSetVisibility;
 use League\Flysystem\UnableToWriteFile;
@@ -51,7 +54,7 @@ final class EncryptedS3FilesystemTest extends TestCase
         $plain = 'do-not-return-this-plaintext';
         Storage::disk()->put('tampered.txt', $plain);
         $ciphertext = $this->aws->objects['tampered.txt']['body'];
-        $ciphertext[0] = chr(ord($ciphertext[0]) ^ 1);
+        $ciphertext[0] = $ciphertext[0] ^ "\x01";
         $this->aws->objects['tampered.txt']['body'] = $ciphertext;
 
         try {
@@ -209,8 +212,8 @@ final class EncryptedS3FilesystemTest extends TestCase
 
     public function test_url_operations_are_always_unsupported(): void
     {
-        /** @var EncryptedS3Filesystem $disk */
         $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
         $disk->buildTemporaryUrlsUsing(static fn (): string => 'https://example.test');
 
         foreach (['url', 'temporaryUrl', 'temporaryUploadUrl'] as $operation) {
@@ -343,11 +346,82 @@ final class EncryptedS3FilesystemTest extends TestCase
         self::assertSame(strlen($plain) + 16, Storage::disk()->size('sized.txt'));
     }
 
+    public function test_download_measures_plaintext_length_and_streams_the_body_once(): void
+    {
+        $plain = "download plaintext\x00";
+        $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
+        $disk->put('download.txt', $plain, ['mimetype' => 'text/plain']);
+
+        self::assertNotSame(strlen($plain), $disk->size('download.txt'));
+
+        $response = $disk->download('download.txt', 'attachment-name.txt');
+        $contentDisposition = $response->headers->get('Content-Disposition');
+        self::assertNotNull($contentDisposition);
+
+        self::assertSame((string) strlen($plain), $response->headers->get('Content-Length'));
+        self::assertStringContainsString('attachment', $contentDisposition);
+        self::assertStringContainsString('attachment-name.txt', $contentDisposition);
+
+        ob_start();
+        $response->sendContent();
+        $body = ob_get_clean();
+
+        self::assertSame($plain, $body);
+
+        $getRequests = array_filter(
+            $this->aws->s3Requests,
+            static fn (array $request): bool => $request['command'] === 'GetObject',
+        );
+        self::assertCount(1, $getRequests);
+    }
+
+    public function test_response_measures_plaintext_length_and_preserves_content_type(): void
+    {
+        $plain = 'response plaintext';
+        $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
+        $disk->put('response.txt', $plain, ['mimetype' => 'text/plain']);
+
+        $response = $disk->response('response.txt', 'inline-name.txt');
+        $contentDisposition = $response->headers->get('Content-Disposition');
+        self::assertNotNull($contentDisposition);
+
+        self::assertSame((string) strlen($plain), $response->headers->get('Content-Length'));
+        self::assertSame('text/plain', $response->headers->get('Content-Type'));
+        self::assertStringContainsString('inline', $contentDisposition);
+        self::assertStringContainsString('inline-name.txt', $contentDisposition);
+
+        ob_start();
+        $response->sendContent();
+        $body = ob_get_clean();
+
+        self::assertSame($plain, $body);
+    }
+
+    public function test_response_keeps_a_caller_supplied_content_length(): void
+    {
+        $plain = 'caller supplied length';
+        $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
+        $disk->put('supplied-length.txt', $plain);
+
+        $response = $disk->response('supplied-length.txt', null, ['Content-Length' => '123']);
+
+        self::assertSame('123', $response->headers->get('Content-Length'));
+
+        ob_start();
+        $response->sendContent();
+        $body = ob_get_clean();
+
+        self::assertSame($plain, $body);
+    }
+
     public function test_checksum_is_calculated_from_plaintext(): void
     {
         $plain = 'checksum plaintext';
-        /** @var EncryptedS3Filesystem $disk */
         $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
         $disk->put('checksum.txt', $plain);
 
         self::assertSame(md5($plain), $disk->checksum('checksum.txt'));
@@ -355,8 +429,8 @@ final class EncryptedS3FilesystemTest extends TestCase
 
     public function test_mime_type_can_be_set_at_write_time(): void
     {
-        /** @var EncryptedS3Filesystem $disk */
         $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
         $disk->put('mime.bin', 'mime body', ['mimetype' => 'application/x-encrypted-test']);
 
         self::assertSame('application/x-encrypted-test', $disk->mimeType('mime.bin'));
@@ -416,8 +490,7 @@ final class EncryptedS3FilesystemTest extends TestCase
     {
         $config = $this->diskConfig();
         unset($config['visibility']);
-        $this->app['config']->set('filesystems.disks.encrypted-s3', $config);
-        $this->app['filesystem']->forgetDisk('encrypted-s3');
+        $this->setDiskConfig($config);
 
         Storage::disk()->put('no-visibility.txt', 'body');
 
@@ -538,10 +611,105 @@ final class EncryptedS3FilesystemTest extends TestCase
         self::assertSame('public-read', $request['headers']['x-amz-acl'] ?? null);
     }
 
+    public function test_make_directory_uses_the_encrypted_put_path_without_an_acl_by_default(): void
+    {
+        $disk = Storage::disk();
+        $disk->makeDirectory('encrypted-directory');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertArrayNotHasKey('x-amz-acl', $request['headers']);
+        self::assertNotEmpty($this->envelopeHeaders('encrypted-directory/'));
+        self::assertTrue($disk->directoryExists('encrypted-directory'));
+        self::assertTrue($disk->exists('encrypted-directory'));
+    }
+
+    public function test_make_directory_succeeds_on_an_acl_disabled_bucket(): void
+    {
+        $this->aws->disableAcls();
+
+        self::assertTrue(Storage::disk()->makeDirectory('acl-disabled-directory'));
+    }
+
+    public function test_make_directory_returns_false_when_kms_fails_and_throw_is_disabled(): void
+    {
+        $this->configureDisk(['throw' => false]);
+        $this->aws->failKmsWith('AccessDeniedException', 'KMS secret directory failure.');
+
+        self::assertFalse(Storage::disk()->makeDirectory('failed-directory'));
+    }
+
+    public function test_make_directory_throws_a_directory_exception_with_a_redacted_reason(): void
+    {
+        $this->aws->failKmsWith('AccessDeniedException', 'KMS secret directory failure.');
+
+        try {
+            Storage::disk()->makeDirectory('failed-directory');
+            self::fail('The directory failure was swallowed.');
+        } catch (UnableToCreateDirectory $exception) {
+            $previous = $exception->getPrevious();
+            self::assertInstanceOf(UnableToWriteFile::class, $previous);
+            self::assertSame($previous->reason(), $exception->reason());
+            self::assertStringNotContainsString('KMS secret directory failure', $exception->getMessage());
+            self::assertStringNotContainsString('kms-key-id', $exception->getMessage());
+        }
+    }
+
+    public function test_make_directory_propagates_put_configuration_errors(): void
+    {
+        $this->configureDisk([
+            'options' => ['GrantRead' => 'id="reader"'],
+            'visibility' => 'private',
+        ]);
+
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage(
+            'The S3 put options cannot combine ACL with grant headers (GrantRead);',
+        );
+
+        Storage::disk()->makeDirectory('invalid-configuration-directory');
+    }
+
+    public function test_make_directory_sends_an_acl_for_explicit_visibility(): void
+    {
+        $this->configureDisk(['visibility' => 'public']);
+
+        Storage::disk()->makeDirectory('public-directory');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('public-read', $request['headers']['x-amz-acl'] ?? null);
+    }
+
+    public function test_make_directory_uses_explicit_directory_visibility(): void
+    {
+        $this->configureDisk(['directory_visibility' => 'public']);
+
+        Storage::disk()->makeDirectory('directory-visibility');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('public-read', $request['headers']['x-amz-acl'] ?? null);
+    }
+
+    public function test_make_directory_prefers_visibility_over_directory_visibility(): void
+    {
+        $this->configureDisk([
+            'visibility' => 'private',
+            'directory_visibility' => 'public',
+        ]);
+
+        Storage::disk()->makeDirectory('visibility-priority');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('private', $request['headers']['x-amz-acl'] ?? null);
+    }
+
     public function test_visibility_reads_the_s3_acl(): void
     {
-        /** @var EncryptedS3Filesystem $disk */
         $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
 
         self::assertSame('private', $disk->visibility('visibility.txt'));
 
@@ -586,6 +754,7 @@ final class EncryptedS3FilesystemTest extends TestCase
         self::assertSame('copyable plaintext', Storage::disk()->get('copy.txt'));
         $copyRequest = $this->aws->lastS3Request('PUT');
         self::assertIsArray($copyRequest);
+        self::assertArrayNotHasKey('x-amz-acl', $copyRequest['headers']);
         self::assertArrayHasKey('x-amz-metadata-directive', $copyRequest['headers']);
         self::assertSame('COPY', strtoupper($copyRequest['headers']['x-amz-metadata-directive']));
         self::assertSame($sourceEnvelope, $this->envelopeHeaders('copy.txt'));
@@ -594,6 +763,236 @@ final class EncryptedS3FilesystemTest extends TestCase
 
         self::assertFalse(Storage::disk()->exists('copy.txt'));
         self::assertSame('copyable plaintext', Storage::disk()->get('moved.txt'));
+        self::assertSame($sourceEnvelope, $this->envelopeHeaders('moved.txt'));
+
+        $aclRequests = array_filter(
+            $this->aws->s3Requests,
+            static fn (array $request): bool => $request['command'] === 'GetObjectAcl',
+        );
+        self::assertCount(0, $aclRequests);
+    }
+
+    public function test_copy_and_move_succeed_on_an_acl_disabled_bucket(): void
+    {
+        $this->aws->disableAcls();
+        Storage::disk()->put('source.txt', 'copyable plaintext');
+
+        Storage::disk()->copy('source.txt', 'copy.txt');
+        Storage::disk()->move('copy.txt', 'moved.txt');
+
+        self::assertSame('copyable plaintext', Storage::disk()->get('moved.txt'));
+        self::assertTrue(Storage::disk()->exists('source.txt'));
+
+        foreach ($this->aws->s3Requests as $request) {
+            if ($request['command'] === 'CopyObject') {
+                self::assertArrayNotHasKey('x-amz-acl', $request['headers']);
+            }
+        }
+    }
+
+    public function test_copy_rejects_a_plaintext_source_without_creating_the_destination(): void
+    {
+        $this->aws->putRaw('plaintext-source.txt', 'TOTALLY-PLAINTEXT-CONTENT', [
+            'x-amz-meta-secret' => 'SENSITIVE-METADATA-VALUE',
+        ]);
+
+        try {
+            Storage::disk()->copy('plaintext-source.txt', 'plaintext-copy.txt');
+            self::fail('The plaintext source was copied.');
+        } catch (UnableToCopyFile $exception) {
+            self::assertStringContainsString('not a client-side encrypted V3 object', $exception->getMessage());
+            self::assertStringNotContainsString('SENSITIVE-METADATA-VALUE', $exception->getMessage());
+            self::assertStringNotContainsString('TOTALLY-PLAINTEXT-CONTENT', $exception->getMessage());
+        }
+
+        self::assertArrayNotHasKey('plaintext-copy.txt', $this->aws->objects);
+    }
+
+    public function test_copy_rejects_a_v2_source(): void
+    {
+        $this->aws->putRaw('v2-source.txt', 'legacy ciphertext', $this->v2EnvelopeHeaders());
+
+        $this->expectException(UnableToCopyFile::class);
+        Storage::disk()->copy('v2-source.txt', 'v2-copy.txt');
+    }
+
+    public function test_copy_rejects_a_source_with_v2_and_v3_fields(): void
+    {
+        Storage::disk()->put('v3-source.txt', 'copyable plaintext');
+        $headers = $this->envelopeHeaders('v3-source.txt') + $this->v2EnvelopeHeaders();
+        $this->aws->putRaw('mixed-source.txt', 'mixed ciphertext', $headers);
+
+        $this->expectException(UnableToCopyFile::class);
+        Storage::disk()->copy('mixed-source.txt', 'mixed-copy.txt');
+    }
+
+    public function test_copy_rejects_a_source_with_a_missing_v3_field(): void
+    {
+        Storage::disk()->put('v3-source.txt', 'copyable plaintext');
+        $headers = $this->envelopeHeaders('v3-source.txt');
+        $field = MetadataEnvelope::getV3Fields()[0] ?? null;
+        self::assertIsString($field);
+        unset($headers['x-amz-meta-'.$field]);
+        $this->aws->putRaw('missing-field-source.txt', 'incomplete ciphertext', $headers);
+
+        $this->expectException(UnableToCopyFile::class);
+        Storage::disk()->copy('missing-field-source.txt', 'missing-field-copy.txt');
+    }
+
+    public function test_move_rejects_a_plaintext_source_without_deleting_it(): void
+    {
+        $this->aws->putRaw('plaintext-move-source.txt', 'plaintext source');
+
+        try {
+            Storage::disk()->move('plaintext-move-source.txt', 'plaintext-move-target.txt');
+            self::fail('The plaintext source was moved.');
+        } catch (UnableToMoveFile) {
+            self::assertArrayHasKey('plaintext-move-source.txt', $this->aws->objects);
+            self::assertArrayNotHasKey('plaintext-move-target.txt', $this->aws->objects);
+        }
+    }
+
+    public function test_copy_returns_false_for_a_plaintext_source_when_throw_is_disabled(): void
+    {
+        $this->configureDisk(['throw' => false]);
+        $this->aws->putRaw('plaintext-source.txt', 'plaintext source');
+
+        self::assertFalse(Storage::disk()->copy('plaintext-source.txt', 'plaintext-copy.txt'));
+    }
+
+    public function test_copy_redacts_a_missing_source_failure(): void
+    {
+        try {
+            Storage::disk()->copy('missing-source.txt', 'missing-copy.txt');
+            self::fail('The missing source failure was swallowed.');
+        } catch (UnableToCopyFile $exception) {
+            self::assertStringContainsString('S3Exception (NoSuchKey)', $exception->getMessage());
+            self::assertStringNotContainsString('Not found.', $exception->getMessage());
+        }
+    }
+
+    public function test_copy_sends_an_acl_for_explicit_per_call_visibility(): void
+    {
+        Storage::disk()->put('source.txt', 'copyable plaintext');
+
+        Storage::disk()->getDriver()->copy('source.txt', 'public-copy.txt', ['visibility' => 'public']);
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('public-read', $request['headers']['x-amz-acl'] ?? null);
+    }
+
+    public function test_copy_sends_an_explicit_acl_option(): void
+    {
+        Storage::disk()->put('source.txt', 'copyable plaintext');
+
+        Storage::disk()->getDriver()->copy(
+            'source.txt',
+            'acl-copy.txt',
+            ['ACL' => 'bucket-owner-full-control'],
+        );
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('bucket-owner-full-control', $request['headers']['x-amz-acl'] ?? null);
+    }
+
+    public function test_copy_rejects_acl_and_grant_options_together(): void
+    {
+        Storage::disk()->put('source.txt', 'copyable plaintext');
+
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('cannot combine ACL with grant headers (GrantRead)');
+
+        Storage::disk()->getDriver()->copy(
+            'source.txt',
+            'conflicting-copy.txt',
+            [
+                'ACL' => 'private',
+                'GrantRead' => 'id="reader"',
+            ],
+        );
+    }
+
+    public function test_copy_rejects_metadata_replace_to_preserve_the_cse_envelope(): void
+    {
+        Storage::disk()->put('source.txt', 'copyable plaintext');
+
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('MetadataDirective must be COPY');
+
+        Storage::disk()->getDriver()->copy('source.txt', 'replace-copy.txt', ['MetadataDirective' => 'REPLACE']);
+    }
+
+    public function test_copy_does_not_forward_incompatible_encryption_options(): void
+    {
+        Storage::disk()->put('source.txt', 'copyable plaintext');
+
+        Storage::disk()->getDriver()->copy('source.txt', 'filtered-copy.txt', [
+            'Metadata' => ['unsafe' => 'value'],
+            'CopySourceSSECustomerAlgorithm' => 'AES256',
+            'CopySourceSSECustomerKey' => 'secret-key',
+            'CopySourceSSECustomerKeyMD5' => 'secret-md5',
+            'ServerSideEncryption' => 'aws:kms',
+            'SSEKMSKeyId' => 'secret-kms-key',
+            'SSECustomerAlgorithm' => 'AES256',
+            'SSECustomerKey' => 'secret-key',
+            'SSECustomerKeyMD5' => 'secret-md5',
+        ]);
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+
+        foreach ([
+            'x-amz-meta-unsafe',
+            'x-amz-copy-source-server-side-encryption-customer-algorithm',
+            'x-amz-copy-source-server-side-encryption-customer-key',
+            'x-amz-copy-source-server-side-encryption-customer-key-md5',
+            'x-amz-server-side-encryption',
+            'x-amz-server-side-encryption-aws-kms-key-id',
+            'x-amz-server-side-encryption-customer-algorithm',
+            'x-amz-server-side-encryption-customer-key',
+            'x-amz-server-side-encryption-customer-key-md5',
+        ] as $header) {
+            self::assertArrayNotHasKey($header, $request['headers']);
+        }
+    }
+
+    public function test_copy_failure_is_redacted_as_unable_to_copy_file(): void
+    {
+        Storage::disk()->put('copy-failure-source.txt', 'copyable plaintext');
+        $this->configureDisk([
+            'handler' => static function (): never {
+                throw new InvalidConfigurationException('upstream plaintext SECRET');
+            },
+        ]);
+
+        try {
+            Storage::disk()->copy('copy-failure-source.txt', 'copy-failure-target.txt');
+            self::fail('The copy failure was swallowed.');
+        } catch (UnableToCopyFile $exception) {
+            self::assertStringContainsString('InvalidConfigurationException', $exception->getMessage());
+            self::assertStringNotContainsString('SECRET', $exception->getMessage());
+        }
+    }
+
+    public function test_move_does_not_delete_the_source_when_copy_fails(): void
+    {
+        Storage::disk()->put('move-failure-source.txt', 'copyable plaintext');
+        $this->configureDisk([
+            'handler' => static function (): never {
+                throw new InvalidConfigurationException('upstream plaintext SECRET');
+            },
+        ]);
+
+        try {
+            Storage::disk()->move('move-failure-source.txt', 'move-failure-target.txt');
+            self::fail('The move failure was swallowed.');
+        } catch (UnableToMoveFile $exception) {
+            self::assertStringNotContainsString('SECRET', $exception->getMessage());
+        }
+
+        self::assertArrayHasKey('move-failure-source.txt', $this->aws->objects);
     }
 
     /**
@@ -606,6 +1005,21 @@ final class EncryptedS3FilesystemTest extends TestCase
             static fn (string $header): bool => str_starts_with($header, 'x-amz-meta-x-amz-'),
             ARRAY_FILTER_USE_KEY,
         );
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    private function v2EnvelopeHeaders(): array
+    {
+        $headers = [];
+
+        foreach (MetadataEnvelope::getV2Fields() as $field) {
+            self::assertIsString($field);
+            $headers['x-amz-meta-'.$field] = 'legacy-'.$field;
+        }
+
+        return $headers;
     }
 
     /**
@@ -646,8 +1060,8 @@ final class EncryptedS3FilesystemTest extends TestCase
 
     public function test_basic_metadata_listing_and_delete_operations(): void
     {
-        /** @var EncryptedS3Filesystem $disk */
         $disk = Storage::disk();
+        self::assertInstanceOf(EncryptedS3Filesystem::class, $disk);
         $disk->makeDirectory('folder');
         $disk->put('folder/file.txt', 'file body');
 

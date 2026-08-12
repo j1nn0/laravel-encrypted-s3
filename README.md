@@ -17,7 +17,7 @@ whereas this package keeps the plaintext outside S3.
 - An AWS KMS key and permissions to use it
 - AWS S3
 
-The CSE V3 implementation is provided by AWS SDK for PHP 3.368 or newer.
+The CSE V3 implementation is provided by AWS SDK for PHP 3.382.2 or newer.
 
 ## Installation
 
@@ -82,13 +82,23 @@ client inherits both from the disk when they are not set under `kms`. A
 `credentials` array takes precedence over `key`, `secret`, and `token` at the
 same level.
 
-`root` is an S3 key prefix. Encrypted writes send no ACL unless the user asks
-for one through `visibility` or an explicit `ACL` PutObject option. Per-call
-Flysystem `Config` options override the disk-level `options` array. If both are
-set, `visibility` is applied afterwards and wins over an explicit `ACL`.
+`root` is an S3 key prefix. Encrypted writes, directory markers, and server-side
+copies send no canned ACL unless the user asks for one through `visibility`,
+`directory_visibility` for `makeDirectory()`, or an explicit `ACL` option.
+Per-call Flysystem `Config` options override the disk-level `options` array. If
+both are set, `visibility` is applied afterwards and wins over an explicit
+`ACL`. `copy` and `move` do not retain source visibility and do not issue
+`GetObjectAcl`. Before copying, they require the source metadata to contain a
+complete CSE V3 envelope and no V2 envelope fields; non-CSE sources are rejected
+before a destination is created. An explicit `MetadataDirective` other than
+`COPY` is rejected so the CSE envelope metadata cannot be discarded. Each copy
+performs one validation `HeadObject` in addition to the SDK copy strategy's
+`HeadObject`.
 `options['ACL']` is the route for canned ACLs that Flysystem visibility cannot
-express, such as `bucket-owner-full-control`, which is accepted by ACL-disabled
-buckets. `throw` retains Laravel's normal filesystem exception behavior.
+express, such as `bucket-owner-full-control`. Explicit ACLs can fail on
+ACL-disabled buckets, so omit them when using Object Ownership
+`BucketOwnerEnforced`. `throw` retains Laravel's normal filesystem exception
+behavior.
 `options` is filtered to this package's CSE-compatible `PutObject` allowlist:
 `ACL`, `CacheControl`, `ContentDisposition`, `ContentEncoding`, `ContentType`,
 `Expires`, `GrantFullControl`, `GrantRead`, `GrantReadACP`, `GrantWriteACP`,
@@ -112,12 +122,16 @@ the SDK does not validate it and reported S3 responses reject it with `InvalidRe
 both configuration validation and final request assembly reject it early.
 Grant options remain valid on their own.
 
-The encrypted read and write paths omit a default ACL, but delegated operations
-keep the upstream Flysystem S3 behavior. `visibility()` reads the object ACL
-and works on ACL-disabled buckets because AWS returns the owner's full-control
-grant. `createDirectory()`, `copy()`, `move()` (which copies), and
-`setVisibility()` send ACL requests and fail with
-`AccessControlListNotSupported` when ACLs are disabled on the bucket.
+The package sends a canned `x-amz-acl` only when the user explicitly requests
+one through `visibility`, `directory_visibility`, or `options['ACL']`. Explicit
+grant options are likewise sent only when configured. `makeDirectory()` writes
+an encrypted trailing-slash marker through the CSE put path and makes one KMS
+`GenerateDataKey` call per marker. `copy()` and `move()` use server-side S3
+copy without retaining source visibility; `MetadataDirective` is pinned to
+`COPY`, and an explicit `REPLACE` is rejected. `visibility()` reads the object
+ACL and works on ACL-disabled buckets because AWS returns the owner's
+full-control grant. `setVisibility()` remains an explicit ACL operation and
+can fail with `AccessControlListNotSupported` when ACLs are disabled.
 
 `kms.key_id` is required; there is no unencrypted fallback. The KMS region
 defaults to the disk region, and KMS credentials default to the disk
@@ -151,9 +165,11 @@ The application credentials need, at minimum:
 - `s3:ListBucket`
 - `s3:GetObjectAcl` and `s3:PutObjectAcl` (for visibility operations)
 
-`HeadObject` uses the `s3:GetObject` permission. S3 server-side `copy` and
-`move` use `s3:GetObject` on the source and `s3:PutObject` on the destination;
-there is no separate `s3:CopyObject` IAM action.
+The package's server-side `copy` and `move` use one `HeadObject` to verify the
+source CSE V3 envelope, and the SDK uses another `HeadObject` to select the
+copy strategy. `HeadObject` uses the `s3:GetObject` permission. They then use
+`s3:GetObject` on the source and `s3:PutObject` on the destination; there is no
+separate `s3:CopyObject` IAM action.
 
 Restrict the S3 resource to the configured bucket and prefix, and restrict the
 KMS resource to the intended key whenever possible.
@@ -175,15 +191,16 @@ implementation is not streaming internally.
 
 | Operation | Support | Meaning and constraints |
 | --- | --- | --- |
-| `put` / `write` | Supported with constraints | Stored encrypted with CSE. No ACL is sent unless requested through `visibility` or an explicit `options['ACL']`; `visibility` wins when both are set. The SDK holds the complete plaintext in memory; watch `memory_limit` for large objects. |
-| `get` / `read` | Supported with constraints | Returns decrypted plaintext. The complete ciphertext is held in memory. |
-| `writeStream` | Supported with constraints | Works, but is not memory-efficient because the SDK CSE implementation is non-streaming. |
-| `readStream` | Supported with constraints | The returned resource is backed by decrypted plaintext held in memory. |
+| `put` / `write` | Supported with constraints | Stored encrypted with CSE. No ACL is sent unless requested through `visibility` or an explicit `options['ACL']`; `visibility` wins when both are set. String bodies are buffered by the SDK and can spill plaintext to a local `php://temp` file at 2 MiB or larger; watch `memory_limit` and the temp-file guidance below. |
+| `get` / `read` | Supported with constraints | Returns decrypted plaintext. The complete ciphertext and plaintext are buffered by the SDK, and plaintext at 2 MiB or larger can spill to a local `php://temp` file. |
+| `writeStream` | Supported with constraints | Works, but is not memory-efficient because the SDK CSE implementation is non-streaming. A caller-supplied resource is wrapped as-is, so the SDK does not create an additional plaintext temp-file copy; any spill belongs to the caller's stream. |
+| `readStream` | Supported with constraints | The returned resource is backed by decrypted plaintext that the SDK may spill to a local `php://temp` file at 2 MiB or larger. The resource is detached, so callers must close it. |
+| `download` / `response` / `serve` | Supported with constraints | Streams decrypted plaintext. `Content-Length` is measured from the authenticated decrypted stream, and `download()` and `serve()` route through `response()`; the same stream is measured and sent, so one S3 GET serves a response. |
 | `exists` / `fileExists` / `directoryExists` | Fully supported | Unrelated to encryption. |
 | `delete` / `deleteDirectory` | Fully supported | Unrelated to encryption. |
-| `makeDirectory` / `createDirectory` | Supported with constraints | Delegated to Flysystem's S3 adapter, which sends an ACL and fails with `AccessControlListNotSupported` when bucket ACLs are disabled. |
-| `copy` | Supported with constraints | S3 server-side copy preserves the encryption envelope, so the copy remains readable. It is not re-encrypted; the original KMS encryption context is retained. The delegated adapter sends an ACL and fails when bucket ACLs are disabled. |
-| `move` | Supported with constraints | Copy followed by delete, with the same ACL constraint as `copy`. |
+| `makeDirectory` / `createDirectory` | Supported with constraints | Writes a CSE-encrypted trailing-slash marker through the put path. It sends no ACL by default, makes one KMS `GenerateDataKey` call, and accepts an explicitly configured `visibility` or `directory_visibility`. |
+| `copy` | Supported with constraints | Uses SDK server-side copy, preserving the encryption envelope and original KMS encryption context without re-encryption. It first verifies that the source has every CSE V3 envelope field and no V2 field; non-CSE sources are rejected before the destination is created. It sends no ACL or `GetObjectAcl` request unless an ACL is explicitly requested; `MetadataDirective` is fixed to `COPY`, and `REPLACE` is rejected. |
+| `move` | Supported with constraints | Copy followed by delete. The same CSE V3 source-envelope check and ACL/metadata-directive rules as `copy` apply; the source is deleted only after a validated copy succeeds. |
 | `size` | Supported with constraints | Returns ciphertext size, including the 16-byte GCM tag, not plaintext size. |
 | `mimeType` | Supported with constraints | Returns the plaintext MIME type detected or supplied at write time. The MIME type is exposed as unencrypted S3 metadata. |
 | `lastModified` | Fully supported | Unrelated to encryption. |
@@ -203,25 +220,56 @@ implementation is not streaming internally.
 - V1 or V2 format writes and legacy-format reads
 - Re-encryption or key-rotation utilities
 - Custom plaintext-size metadata
+- Application-level control over the AWS SDK's plaintext `php://temp` spill behavior
 - Combined SSE server-side encryption support
 
 ## Constraints and security notes
 
 - CSE V3 is non-streaming. Encryption and decryption can require several
-  times the plaintext size in memory.
+  times the plaintext size in memory, and the SDK's string-buffer paths can
+  also spill plaintext to a local temp file at 2 MiB (2,097,152 bytes) or
+  larger.
+- The affected operations are string-based `put()`/`write()`, decrypted
+  `get()`/`read()` and `readStream()`, and `response()`/`download()`/`serve()`
+  through their decrypted stream. Below 2 MiB, `php://temp` remains memory-only;
+  at or above 2 MiB, it can create a mode-`0600` file in `sys_get_temp_dir()`.
+  The file has a real name while open, although stream metadata still reports
+  `php://temp`.
+- The temp file is normally unlinked when its stream closes. The resource from
+  `readStream()` is detached, so callers must close it; abnormal termination
+  such as `SIGKILL`, an OOM kill, or a segfault can leave the plaintext file
+  behind. A `writeStream()` resource is caller-owned and does not receive an
+  additional SDK-created plaintext temp-file copy.
+- There is no package-level control for this SDK buffer. Point `sys_temp_dir`
+  in `php.ini`, or set `TMPDIR`/`TMP`/`TEMP` before process startup, at a
+  RAM-backed `tmpfs` or encrypted volume. A runtime `putenv()` change is too
+  late because the temp-directory value is cached at startup.
 - `size()` is ciphertext size.
 - `checksum()` is a plaintext hash and requires download, KMS decryption, and
   the associated memory and network cost.
 - MIME type, object key names, and object size are not encrypted.
 - `copy` and `move` preserve the existing envelope and do not re-encrypt.
+- `copy` and `move` fail closed for plaintext, V1, V2, mixed V2/V3, or incomplete
+  CSE metadata. The source must have all V3 envelope fields and no V2 fields;
+  the `x-amz-d` value is only checked for presence. The validation adds one
+  `HeadObject` per copy in addition to the SDK's strategy-selection request.
+- `makeDirectory()` stores its marker with a CSE V3 envelope and performs one
+  KMS `GenerateDataKey` call per invocation.
+- `copy()` rejects `MetadataDirective=REPLACE`; the directive is pinned to
+  `COPY` so the CSE envelope metadata remains attached to the copied object.
+- Package-owned writes and copies omit an implicit canned ACL. Only an explicit
+  ACL request is sent; `setVisibility()` is intentionally an explicit ACL
+  operation.
 - This package stores encryption envelopes only in S3 object metadata and never
   reads instruction files. This intentionally removes the instruction-file
   attack surface for GHSA-x8cp-jf6f-r4xh (CVE-2025-14761, Invisible Salamanders
   EDK replacement).
 - Existing objects written with the instruction-file strategy cannot be read by
   this package.
-- The `aws/aws-sdk-php` dependency lower bound of `^3.368` matches the patched
-  version for this advisory.
+- The `aws/aws-sdk-php` dependency requires `^3.382.2`. AWS SDK 3.368 fixed
+  GHSA-x8cp-jf6f-r4xh (CVE-2025-14761); 3.382.2 is required because its S3 REST
+  serializer is the first version that omits a header when the package passes a
+  null ACL to `S3Client::copy()`.
 - Decryption failures fail closed. This package never falls back to reading
   an unencrypted S3 object or returns ciphertext as plaintext.
 - `security_profile = 'V3_AND_LEGACY'` is rejected during configuration because
@@ -276,7 +324,7 @@ composer analyse
 ```
 
 `composer lint` runs Laravel Pint in test mode. `composer analyse` runs
-PHPStan at level 6 against `src` and `tests`.
+PHPStan at level 10 against `src` and `tests`.
 
 The HTTP integration layer uses the pinned `motoserver/moto:5.2.2` container
 as local S3 + KMS. Start it, run the explicit integration suite, and stop it

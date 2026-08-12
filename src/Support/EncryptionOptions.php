@@ -97,11 +97,11 @@ final class EncryptionOptions
     }
 
     /**
-     * @param  array<string, mixed>  $config
+     * @param  array<mixed, mixed>  $config
      */
     public static function fromConfig(array $config): self
     {
-        self::assertKnownConfigKeys($config);
+        $config = self::assertKnownConfigKeys($config);
 
         $commitmentPolicy = $config['commitment_policy']
             ?? self::COMMITMENT_POLICY_REQUIRE_ENCRYPT_REQUIRE_DECRYPT;
@@ -117,6 +117,8 @@ final class EncryptionOptions
             throw new InvalidConfigurationException('The encryption context must be an associative array.');
         }
 
+        $encryptionContext = self::validateEncryptionContext($encryptionContext);
+
         if (! is_bool($allowDecryptWithAnyCmk)) {
             throw new InvalidConfigurationException('The KMS CMK fallback option must be boolean.');
         }
@@ -131,26 +133,36 @@ final class EncryptionOptions
 
     /**
      * @param  array<mixed, mixed>  $config
+     * @return array<string, mixed>
      */
-    private static function assertKnownConfigKeys(array $config): void
+    private static function assertKnownConfigKeys(array $config): array
     {
-        foreach (array_keys($config) as $key) {
+        $validated = [];
+
+        foreach ($config as $key => $value) {
             if (! is_string($key) || ! in_array($key, self::CONFIG_KEYS, true)) {
                 throw new InvalidConfigurationException(
                     "The encryption option {$key} is not supported.",
                 );
             }
+
+            $validated[$key] = $value;
         }
+
+        return $validated;
     }
 
     /**
-     * @param  array<mixed>  $context
+     * @param  array<mixed, mixed>  $context
+     * @return array<string, string>
      */
-    private static function validateEncryptionContext(array $context): void
+    private static function validateEncryptionContext(array $context): array
     {
         if ($context !== [] && array_is_list($context)) {
             throw new InvalidConfigurationException('The encryption context must be an associative array.');
         }
+
+        $validated = [];
 
         foreach ($context as $key => $value) {
             if (! is_string($key) || ! is_string($value)) {
@@ -160,6 +172,10 @@ final class EncryptionOptions
             if (in_array($key, self::RESERVED_CONTEXT_KEYS, true)) {
                 throw new InvalidConfigurationException('The encryption context contains a reserved key.');
             }
+
+            $validated[$key] = $value;
         }
+
+        return $validated;
     }
 }

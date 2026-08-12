@@ -22,7 +22,7 @@ use League\MimeTypeDetection\FinfoMimeTypeDetector;
 final class EncryptedS3DiskFactory
 {
     /**
-     * @param  array<string, mixed>  $config
+     * @param  array<mixed, mixed>  $config
      */
     public function make(array $config): EncryptedS3Filesystem
     {
@@ -55,6 +55,7 @@ final class EncryptedS3DiskFactory
         );
         $adapter = new EncryptedS3Adapter(
             $encryptionClient,
+            $s3Client,
             $inner,
             $arguments,
         );

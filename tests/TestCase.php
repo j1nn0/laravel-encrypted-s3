@@ -4,8 +4,12 @@ declare(strict_types=1);
 
 namespace J1nn0\EncryptedS3\Tests;
 
+use Illuminate\Config\Repository;
+use Illuminate\Filesystem\FilesystemManager;
+use Illuminate\Foundation\Application;
 use J1nn0\EncryptedS3\EncryptedS3ServiceProvider;
 use J1nn0\EncryptedS3\Tests\Support\InMemoryAws;
+use LogicException;
 use Orchestra\Testbench\TestCase as OrchestraTestCase;
 
 abstract class TestCase extends OrchestraTestCase
@@ -66,8 +70,41 @@ abstract class TestCase extends OrchestraTestCase
      */
     protected function configureDisk(array $overrides): void
     {
-        $config = array_replace_recursive($this->diskConfig(), $overrides);
-        $this->app['config']->set('filesystems.disks.encrypted-s3', $config);
-        $this->app['filesystem']->forgetDisk('encrypted-s3');
+        $config = $this->stringKeyedConfig(array_replace_recursive($this->diskConfig(), $overrides));
+        $this->setDiskConfig($config);
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    protected function setDiskConfig(array $config): void
+    {
+        $app = $this->app;
+
+        if (! $app instanceof Application) {
+            throw new LogicException('The test application is not available.');
+        }
+
+        $app->make(Repository::class)->set('filesystems.disks.encrypted-s3', $config);
+        $app->make(FilesystemManager::class)->forgetDisk('encrypted-s3');
+    }
+
+    /**
+     * @param  array<mixed, mixed>  $config
+     * @return array<string, mixed>
+     */
+    private function stringKeyedConfig(array $config): array
+    {
+        $validated = [];
+
+        foreach ($config as $key => $value) {
+            if (! is_string($key)) {
+                throw new LogicException('The test configuration must have string keys.');
+            }
+
+            $validated[$key] = $value;
+        }
+
+        return $validated;
     }
 }
