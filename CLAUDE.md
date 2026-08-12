@@ -44,9 +44,11 @@ Four layers, wired top-down by `EncryptedS3DiskFactory::make()`:
    unencrypted S3 metadata. The adapter itself builds no request arguments — it holds three
    constructor arguments (`S3EncryptionClientV3`, `AwsS3V3Adapter`, `EncryptedS3Arguments`) and
    routes.
-4. `Filesystem\EncryptedS3Filesystem` — extends Laravel's `FilesystemAdapter` only to make
-   `url`/`temporaryUrl`/`temporaryUploadUrl` throw `UnsupportedOperationException` and report
-   `providesTemporary*Urls() === false`.
+4. `Filesystem\EncryptedS3Filesystem` — extends Laravel's `FilesystemAdapter` to make
+   `url`/`temporaryUrl`/`temporaryUploadUrl` throw `UnsupportedOperationException`, report
+   `providesTemporary*Urls() === false`, and override `response()` to measure `Content-Length`
+   from the eagerly opened decrypted stream before streaming that same handle. Laravel's
+   `download()` and `serve()` route through this override.
 
 `Support\ObjectLocation` (`@internal`) owns the bucket and raw root in one place. The delegated
 adapter receives `bucket()` and `root()` from it, while `Support\EncryptedS3Arguments` uses its

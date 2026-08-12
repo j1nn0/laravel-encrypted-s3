@@ -179,6 +179,7 @@ implementation is not streaming internally.
 | `get` / `read` | Supported with constraints | Returns decrypted plaintext. The complete ciphertext is held in memory. |
 | `writeStream` | Supported with constraints | Works, but is not memory-efficient because the SDK CSE implementation is non-streaming. |
 | `readStream` | Supported with constraints | The returned resource is backed by decrypted plaintext held in memory. |
+| `download` / `response` / `serve` | Supported with constraints | Streams decrypted plaintext. `Content-Length` is measured from the authenticated decrypted stream, and `download()` and `serve()` route through `response()`; the same stream is measured and sent, so one S3 GET serves a response. |
 | `exists` / `fileExists` / `directoryExists` | Fully supported | Unrelated to encryption. |
 | `delete` / `deleteDirectory` | Fully supported | Unrelated to encryption. |
 | `makeDirectory` / `createDirectory` | Supported with constraints | Delegated to Flysystem's S3 adapter, which sends an ACL and fails with `AccessControlListNotSupported` when bucket ACLs are disabled. |

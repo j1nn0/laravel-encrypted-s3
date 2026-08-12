@@ -7,6 +7,11 @@ All notable changes to this project are documented here.
 Initial stable release of a Laravel filesystem driver for AWS S3 Client-Side
 Encryption V3. Cryptography is delegated to the AWS SDK.
 
+### Fixed
+
+- `response()`, `download()`, and `serve()` now send the plaintext `Content-Length`
+  measured from the decrypted stream instead of the ciphertext size.
+
 ### Added
 
 - Encrypted writes do not send a default ACL. `visibility` or an explicit
