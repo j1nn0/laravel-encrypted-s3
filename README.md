@@ -175,10 +175,10 @@ implementation is not streaming internally.
 
 | Operation | Support | Meaning and constraints |
 | --- | --- | --- |
-| `put` / `write` | Supported with constraints | Stored encrypted with CSE. No ACL is sent unless requested through `visibility` or an explicit `options['ACL']`; `visibility` wins when both are set. The SDK holds the complete plaintext in memory; watch `memory_limit` for large objects. |
-| `get` / `read` | Supported with constraints | Returns decrypted plaintext. The complete ciphertext is held in memory. |
-| `writeStream` | Supported with constraints | Works, but is not memory-efficient because the SDK CSE implementation is non-streaming. |
-| `readStream` | Supported with constraints | The returned resource is backed by decrypted plaintext held in memory. |
+| `put` / `write` | Supported with constraints | Stored encrypted with CSE. No ACL is sent unless requested through `visibility` or an explicit `options['ACL']`; `visibility` wins when both are set. String bodies are buffered by the SDK and can spill plaintext to a local `php://temp` file at 2 MiB or larger; watch `memory_limit` and the temp-file guidance below. |
+| `get` / `read` | Supported with constraints | Returns decrypted plaintext. The complete ciphertext and plaintext are buffered by the SDK, and plaintext at 2 MiB or larger can spill to a local `php://temp` file. |
+| `writeStream` | Supported with constraints | Works, but is not memory-efficient because the SDK CSE implementation is non-streaming. A caller-supplied resource is wrapped as-is, so the SDK does not create an additional plaintext temp-file copy; any spill belongs to the caller's stream. |
+| `readStream` | Supported with constraints | The returned resource is backed by decrypted plaintext that the SDK may spill to a local `php://temp` file at 2 MiB or larger. The resource is detached, so callers must close it. |
 | `download` / `response` / `serve` | Supported with constraints | Streams decrypted plaintext. `Content-Length` is measured from the authenticated decrypted stream, and `download()` and `serve()` route through `response()`; the same stream is measured and sent, so one S3 GET serves a response. |
 | `exists` / `fileExists` / `directoryExists` | Fully supported | Unrelated to encryption. |
 | `delete` / `deleteDirectory` | Fully supported | Unrelated to encryption. |
@@ -204,12 +204,30 @@ implementation is not streaming internally.
 - V1 or V2 format writes and legacy-format reads
 - Re-encryption or key-rotation utilities
 - Custom plaintext-size metadata
+- Application-level control over the AWS SDK's plaintext `php://temp` spill behavior
 - Combined SSE server-side encryption support
 
 ## Constraints and security notes
 
 - CSE V3 is non-streaming. Encryption and decryption can require several
-  times the plaintext size in memory.
+  times the plaintext size in memory, and the SDK's string-buffer paths can
+  also spill plaintext to a local temp file at 2 MiB (2,097,152 bytes) or
+  larger.
+- The affected operations are string-based `put()`/`write()`, decrypted
+  `get()`/`read()` and `readStream()`, and `response()`/`download()`/`serve()`
+  through their decrypted stream. Below 2 MiB, `php://temp` remains memory-only;
+  at or above 2 MiB, it can create a mode-`0600` file in `sys_get_temp_dir()`.
+  The file has a real name while open, although stream metadata still reports
+  `php://temp`.
+- The temp file is normally unlinked when its stream closes. The resource from
+  `readStream()` is detached, so callers must close it; abnormal termination
+  such as `SIGKILL`, an OOM kill, or a segfault can leave the plaintext file
+  behind. A `writeStream()` resource is caller-owned and does not receive an
+  additional SDK-created plaintext temp-file copy.
+- There is no package-level control for this SDK buffer. Point `sys_temp_dir`
+  in `php.ini`, or set `TMPDIR`/`TMP`/`TEMP` before process startup, at a
+  RAM-backed `tmpfs` or encrypted volume. A runtime `putenv()` change is too
+  late because the temp-directory value is cached at startup.
 - `size()` is ciphertext size.
 - `checksum()` is a plaintext hash and requires download, KMS decryption, and
   the associated memory and network cost.
@@ -277,7 +295,7 @@ composer analyse
 ```
 
 `composer lint` runs Laravel Pint in test mode. `composer analyse` runs
-PHPStan at level 6 against `src` and `tests`.
+PHPStan at level 10 against `src` and `tests`.
 
 The HTTP integration layer uses the pinned `motoserver/moto:5.2.2` container
 as local S3 + KMS. Start it, run the explicit integration suite, and stop it

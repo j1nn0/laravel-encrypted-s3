@@ -38,3 +38,6 @@ Encryption V3. Cryptography is delegated to the AWS SDK.
 - `read()` requires the decrypted response body to be a stream and fails closed
   otherwise, so a malformed response can no longer be returned to the caller as
   an empty string.
+- AWS SDK plaintext buffers can spill to mode-`0600` local temp files at 2 MiB
+  or larger; operators should place the configured temp directory on `tmpfs` or
+  an encrypted volume because the package cannot prevent this.
