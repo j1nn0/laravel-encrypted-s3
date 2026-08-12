@@ -455,6 +455,24 @@ final class EncryptedS3FilesystemTest extends TestCase
         self::assertArrayNotHasKey('custom-option', $request['headers']);
     }
 
+    public function test_top_level_put_options_are_not_forwarded_as_disk_defaults(): void
+    {
+        $this->configureDisk([
+            'ACL' => 'public-read',
+            'StorageClass' => 'GLACIER',
+            'CacheControl' => 'no-store',
+        ]);
+
+        Storage::disk()->put('top-level-options.txt', 'body');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('PutObject', $request['command']);
+        self::assertArrayNotHasKey('x-amz-acl', $request['headers']);
+        self::assertArrayNotHasKey('x-amz-storage-class', $request['headers']);
+        self::assertArrayNotHasKey('cache-control', $request['headers']);
+    }
+
     public function test_a_disk_with_an_unsupported_put_option_is_rejected_at_construction(): void
     {
         $this->configureDisk([
@@ -770,6 +788,19 @@ final class EncryptedS3FilesystemTest extends TestCase
             static fn (array $request): bool => $request['command'] === 'GetObjectAcl',
         );
         self::assertCount(0, $aclRequests);
+    }
+
+    public function test_top_level_acl_is_not_forwarded_to_copy_object(): void
+    {
+        $this->configureDisk(['ACL' => 'public-read']);
+        Storage::disk()->put('source.txt', 'copyable plaintext');
+
+        Storage::disk()->copy('source.txt', 'copy.txt');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('CopyObject', $request['command']);
+        self::assertArrayNotHasKey('x-amz-acl', $request['headers']);
     }
 
     public function test_copy_and_move_succeed_on_an_acl_disabled_bucket(): void

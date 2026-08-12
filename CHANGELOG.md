@@ -17,6 +17,10 @@ Encryption V3. Cryptography is delegated to the AWS SDK.
 
 ### Changed
 
+- **Breaking change:** Only Laravel's six Flysystem write-default keys are
+  forwarded as disk-level Flysystem defaults. AWS PutObject parameters at the
+  top level of the disk configuration are ignored; use the `options` array or
+  per-call Flysystem `Config` instead.
 - PHPStan analysis now runs with Larastan at level 10 over `src` and `tests`.
 - **Breaking requirement:** `aws/aws-sdk-php` now requires `^3.382.2`.
   Version 3.368 fixed GHSA-x8cp-jf6f-r4xh (CVE-2025-14761), while 3.382.2 is

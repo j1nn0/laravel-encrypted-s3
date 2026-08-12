@@ -208,6 +208,34 @@ final class DiskConfigurationTest extends TestCase
         self::assertSame($config, $configuration->raw());
     }
 
+    public function test_flysystem_config_contains_only_laravel_default_keys(): void
+    {
+        $configuration = DiskConfiguration::fromArray(self::configWith([
+            'directory_visibility' => 'private',
+            'retain_visibility' => true,
+            'disable_asserts' => true,
+            'url' => 'https://example.test',
+            'temporary_url' => 'https://temporary.example.test',
+            'key' => 'access-key',
+            'secret' => 'secret-key',
+            'token' => 'session-token',
+            'handler' => static function (): never {
+                throw new LogicException('not called');
+            },
+            'options' => ['CacheControl' => 'no-store'],
+            'ACL' => 'public-read',
+        ]));
+
+        self::assertSame([
+            'visibility' => 'public',
+            'directory_visibility' => 'private',
+            'retain_visibility' => true,
+            'disable_asserts' => true,
+            'url' => 'https://example.test',
+            'temporary_url' => 'https://temporary.example.test',
+        ], $configuration->flysystemConfig());
+    }
+
     public function test_from_array_rejects_reserved_put_options_during_validation(): void
     {
         $this->expectException(InvalidConfigurationException::class);

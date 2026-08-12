@@ -33,7 +33,8 @@ Four layers, wired top-down by `EncryptedS3DiskFactory::make()`:
 2. `EncryptedS3DiskFactory` — wiring only: `Support\DiskConfiguration` validates the disk config,
    while `Support\AwsClientSettings` derives the `S3Client` + `KmsClient` settings (KMS region and
    credentials fall back to the disk's). The factory assembles the stack and passes the raw disk
-   config through to Laravel/Flysystem. Config errors throw `InvalidConfigurationException` at
+   config to Laravel's `FilesystemAdapter` and the Laravel-whitelisted subset to Flysystem. Config
+   errors throw `InvalidConfigurationException` at
    disk-construction time, not on first I/O. The factory does not inject a default `ACL`; explicit
    disk or per-call visibility and raw `ACL` options are handled by `EncryptedS3Arguments::forPut()` —
    `docs/adr/0004-omit-default-acl-on-encrypted-writes.md` supersedes

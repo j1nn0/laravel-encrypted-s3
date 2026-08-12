@@ -30,6 +30,20 @@ final class DiskConfiguration
     ];
 
     /**
+     * Mirrors Laravel's FilesystemManager::createFlysystem() whitelist.
+     *
+     * @var list<string>
+     */
+    private const FLYSYSTEM_CONFIG_KEYS = [
+        'directory_visibility',
+        'disable_asserts',
+        'retain_visibility',
+        'temporary_url',
+        'url',
+        'visibility',
+    ];
+
+    /**
      * @param  array<string, mixed>  $kms
      * @param  array<string, mixed>  $putOptions
      * @param  array<string, mixed>  $raw
@@ -177,6 +191,14 @@ final class DiskConfiguration
     public function raw(): array
     {
         return $this->raw;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function flysystemConfig(): array
+    {
+        return array_intersect_key($this->raw, array_flip(self::FLYSYSTEM_CONFIG_KEYS));
     }
 
     /**

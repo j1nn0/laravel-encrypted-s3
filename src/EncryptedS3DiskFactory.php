@@ -59,7 +59,7 @@ final class EncryptedS3DiskFactory
             $inner,
             $arguments,
         );
-        $filesystem = new Filesystem($adapter, $diskConfiguration->raw());
+        $filesystem = new Filesystem($adapter, $diskConfiguration->flysystemConfig());
 
         return new EncryptedS3Filesystem($filesystem, $adapter, $diskConfiguration->raw());
     }

@@ -82,6 +82,13 @@ client inherits both from the disk when they are not set under `kms`. A
 `credentials` array takes precedence over `key`, `secret`, and `token` at the
 same level.
 
+Only Laravel's Flysystem write-default keys — `visibility`,
+`directory_visibility`, `retain_visibility`, `disable_asserts`, `url`, and
+`temporary_url` — are forwarded as Flysystem defaults. AWS PutObject
+parameters placed at the top level of the disk configuration are ignored;
+`options` is the only disk-level route for them, while per-call Flysystem
+`Config` remains the other route.
+
 `root` is an S3 key prefix. Encrypted writes, directory markers, and server-side
 copies send no canned ACL unless the user asks for one through `visibility`,
 `directory_visibility` for `makeDirectory()`, or an explicit `ACL` option.
