@@ -103,7 +103,18 @@ final class EncryptedS3Adapter implements FilesystemAdapter
 
     public function createDirectory(string $path, Config $config): void
     {
-        $this->inner->createDirectory($path, $config);
+        $configuredVisibility = $config->get(Config::OPTION_VISIBILITY);
+
+        if (! is_string($configuredVisibility) || $configuredVisibility === '') {
+            $directoryVisibility = $config->get(Config::OPTION_DIRECTORY_VISIBILITY);
+
+            if (is_string($directoryVisibility) && $directoryVisibility !== '') {
+                // Explicit visibility wins when both are set, matching forPut()'s existing precedence.
+                $config = $config->withSetting(Config::OPTION_VISIBILITY, $directoryVisibility);
+            }
+        }
+
+        $this->put(rtrim($path, '/').'/', '', $config);
     }
 
     public function setVisibility(string $path, string $visibility): void

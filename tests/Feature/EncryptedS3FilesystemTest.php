@@ -608,6 +608,62 @@ final class EncryptedS3FilesystemTest extends TestCase
         self::assertSame('public-read', $request['headers']['x-amz-acl'] ?? null);
     }
 
+    public function test_make_directory_uses_the_encrypted_put_path_without_an_acl_by_default(): void
+    {
+        $disk = Storage::disk();
+        $disk->makeDirectory('encrypted-directory');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertArrayNotHasKey('x-amz-acl', $request['headers']);
+        self::assertNotEmpty($this->envelopeHeaders('encrypted-directory/'));
+        self::assertTrue($disk->directoryExists('encrypted-directory'));
+        self::assertTrue($disk->exists('encrypted-directory'));
+    }
+
+    public function test_make_directory_succeeds_on_an_acl_disabled_bucket(): void
+    {
+        $this->aws->disableAcls();
+
+        self::assertTrue(Storage::disk()->makeDirectory('acl-disabled-directory'));
+    }
+
+    public function test_make_directory_sends_an_acl_for_explicit_visibility(): void
+    {
+        $this->configureDisk(['visibility' => 'public']);
+
+        Storage::disk()->makeDirectory('public-directory');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('public-read', $request['headers']['x-amz-acl'] ?? null);
+    }
+
+    public function test_make_directory_uses_explicit_directory_visibility(): void
+    {
+        $this->configureDisk(['directory_visibility' => 'public']);
+
+        Storage::disk()->makeDirectory('directory-visibility');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('public-read', $request['headers']['x-amz-acl'] ?? null);
+    }
+
+    public function test_make_directory_prefers_visibility_over_directory_visibility(): void
+    {
+        $this->configureDisk([
+            'visibility' => 'private',
+            'directory_visibility' => 'public',
+        ]);
+
+        Storage::disk()->makeDirectory('visibility-priority');
+
+        $request = $this->aws->lastS3Request('PUT');
+        self::assertIsArray($request);
+        self::assertSame('private', $request['headers']['x-amz-acl'] ?? null);
+    }
+
     public function test_visibility_reads_the_s3_acl(): void
     {
         $disk = Storage::disk();
