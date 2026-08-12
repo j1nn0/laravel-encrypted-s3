@@ -18,6 +18,10 @@ Encryption V3. Cryptography is delegated to the AWS SDK.
 ### Changed
 
 - PHPStan analysis now runs with Larastan at level 10 over `src` and `tests`.
+- **Breaking requirement:** `aws/aws-sdk-php` now requires `^3.382.2`.
+  Version 3.368 fixed GHSA-x8cp-jf6f-r4xh (CVE-2025-14761), while 3.382.2 is
+  the first version whose S3 REST serializer omits a header for the null ACL
+  used by package-owned copies.
 - **Breaking change:** `copy()` and `move()` now use the package-owned S3
   server-side copy path. They no longer inherit source visibility or issue
   `GetObjectAcl`, and they send no implicit ACL; only an explicitly requested

@@ -30,9 +30,13 @@ correct `CopySource` encoding, including spaces and plus signs.
 - `copy()` calls the raw `S3Client::copy()` path. An explicit `visibility` or
   `ACL` option supplies the ACL argument; otherwise the argument is `null`.
   `Aws\Api\Serializer\RestSerializer::applyHeader()` skips null header
-  values, so the request contains no `x-amz-acl` header. `retain_visibility` is
-  intentionally not used, so the copy destination receives the bucket default
-  (normally private) and no `GetObjectAcl` request is made.
+  values, so the request contains no `x-amz-acl` header. This null-header
+  behavior first exists in `aws/aws-sdk-php` 3.382.2, so the package's lower
+  bound is pinned there; 3.368 remains the minimum version that fixes the
+  GHSA-x8cp-jf6f-r4xh advisory but does not provide this copy guarantee.
+  `retain_visibility` is intentionally not used, so the copy destination
+  receives the bucket default (normally private) and no `GetObjectAcl` request
+  is made.
 - `move()` remains copy followed by delete. The source is deleted only after
   the copy succeeds.
 - `MetadataDirective` is pinned to `COPY`. A caller-supplied value other than

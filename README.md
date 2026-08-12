@@ -17,7 +17,7 @@ whereas this package keeps the plaintext outside S3.
 - An AWS KMS key and permissions to use it
 - AWS S3
 
-The CSE V3 implementation is provided by AWS SDK for PHP 3.368 or newer.
+The CSE V3 implementation is provided by AWS SDK for PHP 3.382.2 or newer.
 
 ## Installation
 
@@ -266,8 +266,10 @@ implementation is not streaming internally.
   EDK replacement).
 - Existing objects written with the instruction-file strategy cannot be read by
   this package.
-- The `aws/aws-sdk-php` dependency lower bound of `^3.368` matches the patched
-  version for this advisory.
+- The `aws/aws-sdk-php` dependency requires `^3.382.2`. AWS SDK 3.368 fixed
+  GHSA-x8cp-jf6f-r4xh (CVE-2025-14761); 3.382.2 is required because its S3 REST
+  serializer is the first version that omits a header when the package passes a
+  null ACL to `S3Client::copy()`.
 - Decryption failures fail closed. This package never falls back to reading
   an unencrypted S3 object or returns ciphertext as plaintext.
 - `security_profile = 'V3_AND_LEGACY'` is rejected during configuration because

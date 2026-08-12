@@ -79,7 +79,9 @@ These are the point of the package. Several are enforced in more than one place;
   neither may be dropped.
 - **`FORBID_ENCRYPT_ALLOW_DECRYPT` and `V3_AND_LEGACY` are rejected** in `EncryptionOptions`, with
   the security rationale in the exception message. Only `REQUIRE_ENCRYPT_*` policies and profile
-  `V3` are accepted. The `aws/aws-sdk-php: ^3.368` lower bound is the patched advisory version.
+  `V3` are accepted. The `aws/aws-sdk-php: ^3.382.2` lower bound includes the 3.368 fix for
+  GHSA-x8cp-jf6f-r4xh (CVE-2025-14761) and is required because 3.382.2 first makes the REST
+  serializer omit headers whose generated value is null, which is needed for copy ACL omission.
 - **No unencrypted fallback anywhere.** `kms.key_id` is required; decryption failures surface as
   `UnableToReadFile` and never return ciphertext or an unencrypted object as plaintext.
 - **No presigned URLs**, GET or PUT — either would bypass client-side crypto in one direction.

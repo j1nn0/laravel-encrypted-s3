@@ -29,7 +29,7 @@
     "require": {
         "php": "^8.2",
         "ext-openssl": "*",
-        "aws/aws-sdk-php": "^3.368",
+        "aws/aws-sdk-php": "^3.382.2",
         "illuminate/filesystem": "^12.0 || ^13.0",
         "illuminate/support": "^12.0 || ^13.0",
         "illuminate/contracts": "^12.0 || ^13.0",
