@@ -15,6 +15,7 @@ use J1nn0\EncryptedS3\Filesystem\EncryptedS3Filesystem;
 use J1nn0\EncryptedS3\Support\EncryptionOptions;
 use J1nn0\EncryptedS3\Tests\TestCase;
 use League\Flysystem\UnableToCopyFile;
+use League\Flysystem\UnableToCreateDirectory;
 use League\Flysystem\UnableToMoveFile;
 use League\Flysystem\UnableToReadFile;
 use League\Flysystem\UnableToSetVisibility;
@@ -628,6 +629,45 @@ final class EncryptedS3FilesystemTest extends TestCase
         $this->aws->disableAcls();
 
         self::assertTrue(Storage::disk()->makeDirectory('acl-disabled-directory'));
+    }
+
+    public function test_make_directory_returns_false_when_kms_fails_and_throw_is_disabled(): void
+    {
+        $this->configureDisk(['throw' => false]);
+        $this->aws->failKmsWith('AccessDeniedException', 'KMS secret directory failure.');
+
+        self::assertFalse(Storage::disk()->makeDirectory('failed-directory'));
+    }
+
+    public function test_make_directory_throws_a_directory_exception_with_a_redacted_reason(): void
+    {
+        $this->aws->failKmsWith('AccessDeniedException', 'KMS secret directory failure.');
+
+        try {
+            Storage::disk()->makeDirectory('failed-directory');
+            self::fail('The directory failure was swallowed.');
+        } catch (UnableToCreateDirectory $exception) {
+            $previous = $exception->getPrevious();
+            self::assertInstanceOf(UnableToWriteFile::class, $previous);
+            self::assertSame($previous->reason(), $exception->reason());
+            self::assertStringNotContainsString('KMS secret directory failure', $exception->getMessage());
+            self::assertStringNotContainsString('kms-key-id', $exception->getMessage());
+        }
+    }
+
+    public function test_make_directory_propagates_put_configuration_errors(): void
+    {
+        $this->configureDisk([
+            'options' => ['GrantRead' => 'id="reader"'],
+            'visibility' => 'private',
+        ]);
+
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage(
+            'The S3 put options cannot combine ACL with grant headers (GrantRead);',
+        );
+
+        Storage::disk()->makeDirectory('invalid-configuration-directory');
     }
 
     public function test_make_directory_sends_an_acl_for_explicit_visibility(): void

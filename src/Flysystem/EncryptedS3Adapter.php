@@ -14,6 +14,7 @@ use League\Flysystem\Config;
 use League\Flysystem\FileAttributes;
 use League\Flysystem\FilesystemAdapter;
 use League\Flysystem\UnableToCopyFile;
+use League\Flysystem\UnableToCreateDirectory;
 use League\Flysystem\UnableToMoveFile;
 use League\Flysystem\UnableToReadFile;
 use League\Flysystem\UnableToWriteFile;
@@ -118,7 +119,13 @@ final class EncryptedS3Adapter implements FilesystemAdapter
             }
         }
 
-        $this->put(rtrim($path, '/').'/', '', $config);
+        try {
+            $this->put(rtrim($path, '/').'/', '', $config);
+        } catch (InvalidConfigurationException $exception) {
+            throw $exception;
+        } catch (UnableToWriteFile $exception) {
+            throw UnableToCreateDirectory::atLocation($path, $exception->reason(), $exception);
+        }
     }
 
     public function setVisibility(string $path, string $visibility): void
